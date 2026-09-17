@@ -50,6 +50,11 @@ RUN --mount=type=cache,target=/root/.npm \
 			--fetch-retry-mintimeout=1000 \
 			--fetch-retry-maxtimeout=120000
 
+# npm and npx are only needed during image build, not at runtime.
+# Remove them from the final image to avoid shipping npm's bundled dependencies.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+		/usr/local/bin/npm \
+		/usr/local/bin/npx
 # Copy built code
 COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/services/${SERVICE_NAME}/dist ./services/${SERVICE_NAME}/dist
