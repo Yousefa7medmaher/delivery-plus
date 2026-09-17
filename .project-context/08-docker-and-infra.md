@@ -1,0 +1,108 @@
+# Docker and Infrastructure
+
+## Infrastructure stack
+
+This repository is designed to run locally with Docker Compose. The setup includes both infrastructure services and application services.
+
+The compose definition is in:
+
+- [docker-compose.yml](../docker-compose.yml)
+
+## Core infrastructure components
+
+### PostgreSQL
+
+- Service name: `postgres`
+- Image: `postgres:16-alpine`
+- Port: `5432`
+- Mounted init script: [docker/postgres/init.sql](../docker/postgres/init.sql)
+
+Purpose:
+
+- durable relational storage for service-owned domain tables
+- each service uses its own logical database name inside the same PostgreSQL instance
+
+### Redis
+
+- Service name: `redis`
+- Image: `redis:7-alpine`
+- Port: `6379`
+
+Purpose:
+
+- cart state
+- delivery/tracking location state
+- low-latency runtime data
+
+### Kafka and Zookeeper
+
+- `zookeeper` runs on port `2181`
+- `kafka` runs on port `9092`
+- Kafka UI is exposed on `8085`
+
+Purpose:
+
+- event transport between services
+- asynchronous updates for order, payment, and delivery lifecycle changes
+
+## Service startup model
+
+The stack is built with health checks and `depends_on` conditions. This is important because it avoids starting dependent services before their backing infrastructure is actually ready.
+
+Examples from the compose file:
+
+- `postgres` must be healthy before app services start
+- `kafka` requires healthy `zookeeper`
+- app services wait on infra and downstream dependencies before becoming healthy
+
+## Application service startup pattern
+
+The root build configuration uses a Docker build arg called `SERVICE_NAME` to build individual services. This is reflected in the root Dockerfile and the compose service definitions.
+
+The important behavior is:
+
+- every service is containerized individually
+- they all share the same infra dependencies
+- network-level references use internal Docker hostnames such as `auth-service`, `order-service`, and `kafka`
+
+## Health checks
+
+Each app service exposes a `/health` route and uses a Docker healthcheck like:
+
+- `wget --spider -q http://localhost:<port>/health`
+
+This makes startup order deterministic and makes the stack easier to reason about when debugging issues.
+
+## Environment conventions
+
+The compose file uses environment variables for local defaults, including:
+
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `JWT_SECRET`
+
+Most services receive connection URLs like:
+
+- `DATABASE_URL=postgres://...@postgres:5432/<database_name>`
+- `REDIS_URL=redis://redis:6379`
+- `KAFKA_BROKER=kafka:29092`
+
+## Observability and debugging
+
+The stack includes Kafka UI for broker inspection and service health checks for container readiness. This is enough for local development and debugging, but not for a full production observability stack.
+
+## Operational caveats
+
+A few important caveats are worth keeping in mind:
+
+- the stack is meant for local development and demo use
+- service startup order matters, especially for Kafka and Postgres initialization
+- environment defaults are intentionally simple and may be replaced in real deployments
+- container health checks assume the service exposes `/health` correctly
+
+## Source of truth
+
+- Compose stack: [docker-compose.yml](../docker-compose.yml)
+- Shared init SQL: [docker/postgres/init.sql](../docker/postgres/init.sql)
+- Root Docker build: [Dockerfile](../Dockerfile)
+- Service environment wiring: [docs/services.md](../docs/services.md)
