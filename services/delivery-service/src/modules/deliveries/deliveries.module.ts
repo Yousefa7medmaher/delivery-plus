@@ -1,0 +1,30 @@
+import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Delivery } from '../../entities/delivery.entity';
+import { DeliveriesRepository } from '../../repositories/deliveries.repository';
+import { DeliveriesService } from '../../services/deliveries.service';
+import { DeliveriesController } from '../../controllers/deliveries.controller';
+import { OrderServiceClient } from '../../common/order-service.client';
+import { DriverServiceClient } from '../../common/driver-service.client';
+import { SystemTokenService } from '../../common/system-token.service';
+import { APP_CONFIG, AppConfig } from '../../config/app-config';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([Delivery]),
+    JwtModule.registerAsync({
+      useFactory: (config: AppConfig) => ({ secret: config.jwtSecret }),
+      inject: [APP_CONFIG],
+    }),
+  ],
+  controllers: [DeliveriesController],
+  providers: [
+    DeliveriesService,
+    DeliveriesRepository,
+    OrderServiceClient,
+    DriverServiceClient,
+    SystemTokenService,
+  ],
+})
+export class DeliveriesModule {}
