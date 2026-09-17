@@ -1,0 +1,21 @@
+language: en-US
+reviews:
+  profile: chill
+  high_level_summary: true
+  poem: false
+  review_status: true
+  path_instructions:
+    - path: "services/**/src/**"
+      instructions: |
+        Prioritize real bugs and security risks over style. Check authentication and authorization,
+        payment correctness, service boundaries, HTTP contracts, Kafka delivery and idempotency,
+        Redis consistency, database ownership, error handling, logging, and tests.
+    - path: "docker-compose.yml"
+      instructions: |
+        Check service names, ports, health dependencies, internal URLs, database isolation,
+        safe defaults, and accidental secret exposure.
+    - path: ".github/**"
+      instructions: |
+        Check workflow permissions, dependency pinning, secret handling, and deterministic CI.
+chat:
+  auto_reply: true

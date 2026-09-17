@@ -1,0 +1,45 @@
+import 'reflect-metadata';
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { createProxyMiddleware } from 'http-proxy-middleware';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  const PORT = process.env.PORT || 3000;
+
+  // Rate Limiting could be applied globally here using nestjs/throttler or shared module
+  // Authentication could be verified here or delegated to downstream services
+
+  // Setup proxies
+  const proxies = {
+    '/api/auth': process.env.AUTH_SERVICE_URL || 'http://localhost:3001',
+    '/api/users': process.env.USER_SERVICE_URL || 'http://localhost:3002',
+    '/api/restaurants': process.env.RESTAURANT_SERVICE_URL || 'http://localhost:3003',
+    '/api/menus': process.env.MENU_SERVICE_URL || 'http://localhost:3004',
+    '/api/cart': process.env.CART_SERVICE_URL || 'http://localhost:3005',
+    '/api/orders': process.env.ORDER_SERVICE_URL || 'http://localhost:3006',
+    '/api/payments': process.env.PAYMENT_SERVICE_URL || 'http://localhost:3007',
+    '/api/deliveries': process.env.DELIVERY_SERVICE_URL || 'http://localhost:3008',
+    '/api/drivers': process.env.DRIVER_SERVICE_URL || 'http://localhost:3009',
+    '/api/tracking': process.env.TRACKING_SERVICE_URL || 'http://localhost:3010',
+  };
+
+  Object.entries(proxies).forEach(([path, target]) => {
+    app.use(
+      path,
+      createProxyMiddleware({
+        target,
+        changeOrigin: true,
+        pathRewrite: {
+          ['^' + path]: '', // strip base path
+        },
+      }),
+    );
+  });
+
+  await app.listen(PORT);
+  console.log(\API Gateway running on port \\);
+}
+
+bootstrap();
