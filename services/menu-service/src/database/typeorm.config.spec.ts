@@ -2,9 +2,11 @@ import { join } from 'node:path';
 import { QueryRunner } from 'typeorm';
 import { Category } from '../entities/category.entity';
 import { MenuItem } from '../entities/menu-item.entity';
-import { AppDataSource, default as defaultDataSource } from './data-source';
+import defaultDataSource from './data-source';
 import { InitialSchema1700000000000 } from './migrations/001-initial-schema';
 import { buildTypeOrmConfig } from './typeorm.config';
+
+const AppDataSource = defaultDataSource;
 
 const databaseUrl = 'postgres://db.example.test:5432/menu';
 
@@ -42,6 +44,11 @@ describe('buildTypeOrmConfig', () => {
 });
 
 describe('AppDataSource', () => {
+  it('exposes exactly one default DataSource export for the migration CLI', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    expect(Object.keys(require('./data-source')).sort()).toEqual(['default']);
+  });
+
   it('wires all menu entities without connecting or enabling implicit schema changes', () => {
     const entities = AppDataSource.options.entities as Array<{ name?: string }>;
     expect(defaultDataSource).toBe(AppDataSource);

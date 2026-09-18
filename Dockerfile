@@ -59,4 +59,12 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
 COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/services/${SERVICE_NAME}/dist ./services/${SERVICE_NAME}/dist
 
-CMD ["sh", "-c", "node ./node_modules/typeorm/cli.js migration:run -d ./services/${SERVICE_NAME}/dist/database/data-source.js && node services/${SERVICE_NAME}/dist/main.js"]
+# Only PostgreSQL-backed services run TypeORM migrations before starting.
+# Services like cart-service, tracking-service, and api-gateway do not own
+# database schemas and must not execute the local TypeORM CLI path.
+CMD ["sh", "-c", "case \"${SERVICE_NAME}\" in \
+  auth-service|user-service|restaurant-service|menu-service|order-service|payment-service|delivery-service|driver-service|notification-service) \
+    node ./node_modules/typeorm/cli.js migration:run -d ./services/${SERVICE_NAME}/dist/database/data-source.js ;; \
+  *) \
+    echo \"Skipping TypeORM migrations for ${SERVICE_NAME}\" ;; \
+  esac && exec node services/${SERVICE_NAME}/dist/main.js"]
