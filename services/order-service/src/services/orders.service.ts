@@ -91,7 +91,14 @@ export class OrdersService implements OnModuleInit {
     await this.kafkaConsumer.start();
   }
 
-  async createFromCart(customerId: string, authHeader: string): Promise<Order> {
+  async createFromCart(customerId: string, authHeader: string, idempotencyKey?: string): Promise<Order> {
+    if (idempotencyKey) {
+      const prior = await this.orders.findByCustomerAndIdempotencyKey(customerId, idempotencyKey);
+      if (prior) {
+        return prior;
+      }
+    }
+
     const cart = await this.cartClient.getCart(authHeader);
 
     if (cart.items.length === 0 || !cart.restaurantId) {
@@ -103,35 +110,46 @@ export class OrdersService implements OnModuleInit {
       throw new BadRequestError('Restaurant is currently closed');
     }
 
-    const order = await this.orders.create(
-      customerId,
-      cart.restaurantId,
-      cart.items.map((item) => ({
-        menuItemId: item.menuItemId,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-      })),
-      cart.total,
-    );
+    try {
+      const order = await this.orders.create(
+        customerId,
+        cart.restaurantId,
+        cart.items.map((item) => ({
+          menuItemId: item.menuItemId,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+        })),
+        cart.total,
+        idempotencyKey,
+      );
 
-    await this.cartClient.clearCart(authHeader);
+      await this.cartClient.clearCart(authHeader);
 
-    await this.kafkaProducer.publish(TOPICS.ORDER_EVENTS, {
-      eventId: uuidv4(),
-      eventType: OrderEventType.CREATED,
-      timestamp: new Date().toISOString(),
-      correlationId: generateCorrelationId(),
-      payload: {
-        orderId: order.id,
-        customerId: order.customerId,
-        restaurantId: order.restaurantId,
-        total: parseFloat(order.totalAmount),
-        status: order.status,
-      },
-    });
+      await this.kafkaProducer.publish(TOPICS.ORDER_EVENTS, {
+        eventId: uuidv4(),
+        eventType: OrderEventType.CREATED,
+        timestamp: new Date().toISOString(),
+        correlationId: generateCorrelationId(),
+        payload: {
+          orderId: order.id,
+          customerId: order.customerId,
+          restaurantId: order.restaurantId,
+          total: parseFloat(order.totalAmount),
+          status: order.status,
+        },
+      });
 
-    return order;
+      return order;
+    } catch (error) {
+      if (idempotencyKey) {
+        const winner = await this.orders.findByCustomerAndIdempotencyKey(customerId, idempotencyKey);
+        if (winner) {
+          return winner;
+        }
+      }
+      throw error;
+    }
   }
 
   async getById(id: string, requesterId: string, requesterRole: UserRole): Promise<Order> {
