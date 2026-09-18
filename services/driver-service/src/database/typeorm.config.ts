@@ -1,10 +1,11 @@
+import { Type } from '@nestjs/common';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { join } from 'node:path';
 import { DataSourceOptions } from 'typeorm';
 
 export function buildTypeOrmConfig(
   databaseUrl: string,
-  entities: Array<Function | string>,
+  entities: Array<Type<unknown> | string>,
   options: Partial<DataSourceOptions> = {},
 ): TypeOrmModuleOptions & DataSourceOptions {
   return {
