@@ -6,19 +6,14 @@ import { HealthController } from './controllers/health.controller';
 import { ConfigModule } from './config/config.module';
 import { loadConfig } from './config/app-config';
 import { Delivery } from './entities/delivery.entity';
+import { buildTypeOrmConfig } from './database/typeorm.config';
 
 const config = loadConfig();
 
 @Module({
   imports: [
     ConfigModule,
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      url: config.databaseUrl,
-      entities: [Delivery],
-      synchronize: config.nodeEnv !== 'production',
-      logging: false,
-    }),
+    TypeOrmModule.forRoot(buildTypeOrmConfig(config.databaseUrl, [Delivery])),
     KafkaModule.register({
       clientId: 'delivery-service',
       brokers: [process.env.KAFKA_BROKER || 'localhost:9092'],

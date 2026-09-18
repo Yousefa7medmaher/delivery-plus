@@ -7,19 +7,14 @@ import { ConfigModule } from './config/config.module';
 import { loadConfig } from './config/app-config';
 import { Order } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
+import { buildTypeOrmConfig } from './database/typeorm.config';
 
 const config = loadConfig();
 
 @Module({
   imports: [
     ConfigModule,
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      url: config.databaseUrl,
-      entities: [Order, OrderItem],
-      synchronize: config.nodeEnv !== 'production',
-      logging: false,
-    }),
+    TypeOrmModule.forRoot(buildTypeOrmConfig(config.databaseUrl, [Order, OrderItem])),
     RedisModule.register({ url: process.env.REDIS_URL || 'redis://localhost:6379' }),
     KafkaModule.register({
       clientId: 'order-service',

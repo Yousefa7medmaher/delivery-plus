@@ -6,19 +6,14 @@ import { HealthController } from './controllers/health.controller';
 import { ConfigModule } from './config/config.module';
 import { loadConfig } from './config/app-config';
 import { Credential } from './entities/credential.entity';
+import { buildTypeOrmConfig } from './database/typeorm.config';
 
 const config = loadConfig();
 
 @Module({
   imports: [
     ConfigModule,
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      url: config.databaseUrl,
-      entities: [Credential],
-      synchronize: config.nodeEnv !== 'production', // simplification: no migration runner wired yet (Phase 12)
-      logging: false,
-    }),
+    TypeOrmModule.forRoot(buildTypeOrmConfig(config.databaseUrl, [Credential])),
     RedisModule.register({ url: process.env.REDIS_URL || 'redis://localhost:6379' }),
     AuthModule,
   ],
