@@ -105,6 +105,8 @@ The service applications are intentionally configured with `synchronize: false` 
 
 In Docker-based startup, each built service image runs the migration step before the application process starts. This is the repository’s deployment-safe path for fresh databases and local development, and it prevents untracked schema creation from runtime sync.
 
+The repository was validated in WSL against the real Compose stack: `docker compose config --quiet` succeeded, the Postgres/Redis/Kafka/Zookeeper services became healthy, and each logical service database was reset and migrated successfully using the project’s migration commands.
+
 ## Operational caveats
 
 A few important caveats are worth keeping in mind:

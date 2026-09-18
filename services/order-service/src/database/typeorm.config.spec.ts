@@ -60,7 +60,8 @@ describe('InitialSchema1700000000000', () => {
     await migration.up(queryRunner);
     await migration.down(queryRunner);
     expect(migration.name).toBe('InitialSchema1700000000000');
-    expect(query).toHaveBeenNthCalledWith(1, 'SELECT 1;');
-    expect(query).toHaveBeenNthCalledWith(2, 'SELECT 1;');
+    expect(query.mock.calls.length).toBeGreaterThan(1);
+    expect(query.mock.calls.some(([sql]) => String(sql).includes('CREATE TABLE'))).toBe(true);
+    expect(query.mock.calls.some(([sql]) => String(sql).includes('DROP TABLE IF EXISTS'))).toBe(true);
   });
 });
