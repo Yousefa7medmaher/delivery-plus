@@ -1,22 +1,27 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
+@ApiTags('health')
 @Controller('health')
 export class HealthController {
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
 
   @Get()
+  @ApiOperation({ summary: 'Health check for the restaurant service' })
   health() {
     return { status: 'ok' };
   }
 
   @Get('live')
+  @ApiOperation({ summary: 'Liveness check for the restaurant service' })
   live() {
     return { status: 'ok' };
   }
 
   @Get('ready')
+  @ApiOperation({ summary: 'Readiness check for the restaurant service' })
   async ready() {
     const checks: Record<string, 'ok' | 'error'> = { postgres: 'ok' };
 
