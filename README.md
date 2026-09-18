@@ -136,8 +136,35 @@ cd delivery-plus
 # install dependencies
 npm install
 
-# spin up Postgres, Redis, Kafka and every service
-docker-compose up --build
+# local dev stack: shared infra + application services
+# use the default dev workflow for day-to-day development
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up --build
+```
+
+For environment-specific validation:
+
+```bash
+# deterministic test layout
+docker compose -f docker-compose.base.yml -f docker-compose.test.yml config --quiet
+
+# production-like validation (requires secrets explicitly)
+# These values are for Compose configuration validation only and must never be used for deployment.
+export POSTGRES_USER="compose_validation_user"
+export POSTGRES_PASSWORD="compose_validation_only_7f3c2b"
+export POSTGRES_USER_URLENCODED="compose_validation_user"
+export POSTGRES_PASSWORD_URLENCODED="compose_validation_only_7f3c2b"
+export JWT_SECRET="compose_validation_only_jwt_9a41d8"
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config --quiet
+```
+
+```powershell
+# PowerShell equivalent
+$env:POSTGRES_USER="compose_validation_user"
+$env:POSTGRES_PASSWORD="compose_validation_only_7f3c2b"
+$env:POSTGRES_USER_URLENCODED="compose_validation_user"
+$env:POSTGRES_PASSWORD_URLENCODED="compose_validation_only_7f3c2b"
+$env:JWT_SECRET="compose_validation_only_jwt_9a41d8"
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config --quiet
 ```
 
 ### Seed sample data

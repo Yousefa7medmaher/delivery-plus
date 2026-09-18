@@ -10,7 +10,11 @@ This document captures the repository layout and the role of the main directorie
 - `shared/` – reusable internal library for events, guards, Redis helpers, logging, and Nest utilities
 - `scripts/` – local scripts for seed and e2e runs
 - `docker/` – Docker-related support files such as the Postgres initialization SQL
-- `docker-compose.yml` – development/local runtime orchestration
+- `docker-compose.base.yml` – shared infrastructure for Postgres, Redis, Zookeeper, and Kafka
+- `docker-compose.dev.yml` – local developer runtime with debug-friendly ports and Kafka UI
+- `docker-compose.test.yml` – deterministic test orchestration
+- `docker-compose.prod.yml` – production-like override that requires explicit secrets
+- `docker-compose.yml` – compatibility file retained for the default local developer workflow
 - `Dockerfile` – multi-service container build definition
 - `.github/` – issue templates, PR template, and CI workflow
 

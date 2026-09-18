@@ -1,0 +1,321 @@
+services:
+  postgres:
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+
+  # The PostgreSQL container receives the raw credentials. Application DATABASE_URL values
+  # must use URI-encoded versions so credentials containing reserved characters remain safe.
+
+  redis:
+    ports: []
+
+  kafka:
+    ports: []
+
+  api-gateway:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: api-gateway
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      AUTH_SERVICE_URL: http://auth-service:3001
+      USER_SERVICE_URL: http://user-service:3002
+      RESTAURANT_SERVICE_URL: http://restaurant-service:3003
+      MENU_SERVICE_URL: http://menu-service:3004
+      CART_SERVICE_URL: http://cart-service:3005
+      ORDER_SERVICE_URL: http://order-service:3006
+      PAYMENT_SERVICE_URL: http://payment-service:3007
+      DELIVERY_SERVICE_URL: http://delivery-service:3008
+      DRIVER_SERVICE_URL: http://driver-service:3009
+      TRACKING_SERVICE_URL: http://tracking-service:3010
+      NOTIFICATION_SERVICE_URL: http://notification-service:3011
+    ports:
+      - '3000:3000'
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3000/health']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      restaurant-service:
+        condition: service_healthy
+      menu-service:
+        condition: service_healthy
+      cart-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      delivery-service:
+        condition: service_healthy
+      driver-service:
+        condition: service_healthy
+      tracking-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+
+  auth-service:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: auth-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER_URLENCODED:?POSTGRES_USER_URLENCODED must be set}:${POSTGRES_PASSWORD_URLENCODED:?POSTGRES_PASSWORD_URLENCODED must be set}@postgres:5432/auth_service
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      USER_SERVICE_URL: http://user-service:3002
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3001/health']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  user-service:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: user-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER_URLENCODED:?POSTGRES_USER_URLENCODED must be set}:${POSTGRES_PASSWORD_URLENCODED:?POSTGRES_PASSWORD_URLENCODED must be set}@postgres:5432/user_service
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      ORDER_SERVICE_URL: http://order-service:3006
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3002/health']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  restaurant-service:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: restaurant-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER_URLENCODED:?POSTGRES_USER_URLENCODED must be set}:${POSTGRES_PASSWORD_URLENCODED:?POSTGRES_PASSWORD_URLENCODED must be set}@postgres:5432/restaurant_service
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3003/health']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  menu-service:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: menu-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER_URLENCODED:?POSTGRES_USER_URLENCODED must be set}:${POSTGRES_PASSWORD_URLENCODED:?POSTGRES_PASSWORD_URLENCODED must be set}@postgres:5432/menu_service
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      RESTAURANT_SERVICE_URL: http://restaurant-service:3003
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3004/health']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      restaurant-service:
+        condition: service_healthy
+
+  cart-service:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: cart-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      MENU_SERVICE_URL: http://menu-service:3004
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3005/health']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      redis:
+        condition: service_healthy
+      menu-service:
+        condition: service_healthy
+
+  order-service:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: order-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER_URLENCODED:?POSTGRES_USER_URLENCODED must be set}:${POSTGRES_PASSWORD_URLENCODED:?POSTGRES_PASSWORD_URLENCODED must be set}@postgres:5432/order_service
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      KAFKA_BROKER: kafka:29092
+      CART_SERVICE_URL: http://cart-service:3005
+      RESTAURANT_SERVICE_URL: http://restaurant-service:3003
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3006/health']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      cart-service:
+        condition: service_healthy
+      restaurant-service:
+        condition: service_healthy
+
+  payment-service:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: payment-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER_URLENCODED:?POSTGRES_USER_URLENCODED must be set}:${POSTGRES_PASSWORD_URLENCODED:?POSTGRES_PASSWORD_URLENCODED must be set}@postgres:5432/payment_service
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      KAFKA_BROKER: kafka:29092
+      ORDER_SERVICE_URL: http://order-service:3006
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3007/health']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+
+  delivery-service:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: delivery-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER_URLENCODED:?POSTGRES_USER_URLENCODED must be set}:${POSTGRES_PASSWORD_URLENCODED:?POSTGRES_PASSWORD_URLENCODED must be set}@postgres:5432/delivery_service
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      KAFKA_BROKER: kafka:29092
+      ORDER_SERVICE_URL: http://order-service:3006
+      DRIVER_SERVICE_URL: http://driver-service:3009
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3008/health']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      driver-service:
+        condition: service_healthy
+
+  driver-service:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: driver-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER_URLENCODED:?POSTGRES_USER_URLENCODED must be set}:${POSTGRES_PASSWORD_URLENCODED:?POSTGRES_PASSWORD_URLENCODED must be set}@postgres:5432/driver_service
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      KAFKA_BROKER: kafka:29092
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3009/health']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  tracking-service:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: tracking-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      DELIVERY_SERVICE_URL: http://delivery-service:3008
+      DRIVER_SERVICE_URL: http://driver-service:3009
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3010/health']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      redis:
+        condition: service_healthy
+      delivery-service:
+        condition: service_healthy
+      driver-service:
+        condition: service_healthy
+
+  notification-service:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: notification-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER_URLENCODED:?POSTGRES_USER_URLENCODED must be set}:${POSTGRES_PASSWORD_URLENCODED:?POSTGRES_PASSWORD_URLENCODED must be set}@postgres:5432/notification_service
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      KAFKA_BROKER: kafka:29092
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3011/health']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
