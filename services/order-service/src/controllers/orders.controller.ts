@@ -1,9 +1,10 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { JwtAuthGuard, CurrentUser, JwtPayload, RateLimit, RateLimitGuard } from '@food-delivery/shared';
 import { OrdersService } from '../services/orders.service';
 import { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
 import { ListOrdersQueryDto } from '../dto/list-orders-query.dto';
+import { IDEMPOTENCY_KEY_HEADER, parseIdempotencyKey } from '../common/idempotency-key';
 
 @ApiTags('orders')
 @ApiBearerAuth()
@@ -15,8 +16,18 @@ export class OrdersController {
   @Post()
   @RateLimit({ limit: 5, windowSeconds: 60 })
   @ApiOperation({ summary: 'Create an order from the current cart' })
-  create(@CurrentUser() user: JwtPayload, @Headers('authorization') authHeader: string) {
-    return this.ordersService.createFromCart(user.sub, authHeader);
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: false,
+    description:
+      'Client-generated key (UUID recommended, max 255 visible ASCII chars). Repeating the same key for the same customer returns the original order instead of creating a duplicate.',
+  })
+  create(
+    @CurrentUser() user: JwtPayload,
+    @Headers('authorization') authHeader: string,
+    @Headers(IDEMPOTENCY_KEY_HEADER) idempotencyKey?: string,
+  ) {
+    return this.ordersService.createFromCart(user.sub, authHeader, parseIdempotencyKey(idempotencyKey));
   }
 
   @Get()

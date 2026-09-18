@@ -28,12 +28,14 @@ export class OrdersRepository {
     restaurantId: string,
     items: NewOrderItem[],
     totalAmount: number,
+    idempotencyKey?: string,
   ): Promise<Order> {
     const order = this.repo.create({
       customerId,
       restaurantId,
       status: OrderStatus.CREATED,
       totalAmount: totalAmount.toFixed(2),
+      idempotencyKey: idempotencyKey ?? null,
       items: items.map(
         (item) =>
           ({
@@ -45,6 +47,12 @@ export class OrdersRepository {
       ),
     });
     return this.repo.save(order);
+  }
+
+  findByCustomerAndIdempotencyKey(customerId: string, idempotencyKey: string): Promise<Order | null> {
+    return this.repo.findOne({
+      where: { customerId, idempotencyKey },
+    });
   }
 
   async updateStatus(id: string, status: OrderStatus): Promise<Order | null> {

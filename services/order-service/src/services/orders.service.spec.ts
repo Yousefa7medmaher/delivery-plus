@@ -36,6 +36,7 @@ describe('OrdersService', () => {
       updateStatus: jest.fn(),
       findByCustomer: jest.fn(),
       findByRestaurant: jest.fn(),
+      findByCustomerAndIdempotencyKey: jest.fn(),
     } as unknown as jest.Mocked<OrdersRepository>;
 
     cartClient = {
@@ -99,6 +100,40 @@ describe('OrdersService', () => {
 
       expect(result.id).toBe('order-1');
       expect(cartClient.clearCart).toHaveBeenCalledWith('Bearer x');
+    });
+
+    it('returns the original order when the same idempotency key is retried', async () => {
+      const existing = { ...baseOrder, id: 'order-existing', customerId: 'customer-1' };
+      orders.findByCustomerAndIdempotencyKey.mockResolvedValue(existing);
+
+      const result = await (service as any).createFromCart('customer-1', 'Bearer x', 'key-1');
+
+      expect(result.id).toBe('order-existing');
+      expect(orders.create).not.toHaveBeenCalled();
+      expect(cartClient.clearCart).not.toHaveBeenCalled();
+    });
+
+    it('replays a lost race with the same idempotency key after a unique-constraint conflict', async () => {
+      const existing = { ...baseOrder, id: 'order-existing', customerId: 'customer-1' };
+      cartClient.getCart.mockResolvedValue({
+        userId: 'c1',
+        restaurantId: 'rest-1',
+        items: [{ menuItemId: 'i1', name: 'Burger', price: 9.99, quantity: 1 }],
+        total: 9.99,
+      });
+      restaurantClient.getRestaurant.mockResolvedValue({
+        id: 'rest-1',
+        ownerId: 'owner-1',
+        name: 'X',
+        status: RestaurantStatus.OPEN,
+      });
+      orders.create.mockRejectedValueOnce(new Error('duplicate key'));
+      orders.findByCustomerAndIdempotencyKey.mockResolvedValue(existing);
+
+      const result = await (service as any).createFromCart('customer-1', 'Bearer x', 'key-1');
+
+      expect(result.id).toBe('order-existing');
+      expect(cartClient.clearCart).not.toHaveBeenCalled();
     });
   });
 

@@ -6,11 +6,22 @@ Coordinates the ordering lifecycle and emits/consumes order payment and delivery
 ## Main REST endpoints
 From `services/order-service/src/controllers/orders.controller.ts`:
 
-- `POST /orders` – create an order from the current cart
+- `POST /orders` – create an order from the current cart, optionally accepting an `Idempotency-Key` header for retry-safe creation
 - `GET /orders` – list the current user’s orders
 - `GET /orders/restaurant/:restaurantId` – list orders for a restaurant (owner only)
 - `GET /orders/:id` – fetch an order by ID
 - `PATCH /orders/:id/status` – transition status with role checks
+
+## Idempotent order creation
+`POST /orders` supports an optional `Idempotency-Key` header. The key is scoped to the authenticated customer and used to prevent duplicate order creation on client retry or network timeout.
+
+Behavior:
+- If the same customer retries the same key, the original order is returned instead of creating another order.
+- If the request races with another request using the same customer+key, the first successful write wins; the losing request replays the stored order.
+- Reusing the same key for a different cart or order is treated as a conflict and cannot silently alias to a different order.
+- The key must be a visible ASCII string up to 255 characters; a UUID is the recommended format.
+
+This is enforced in the application layer and backed by a database uniqueness rule on `(customerId, idempotencyKey)` where the key is not null.
 
 ## Dependencies
 - Reads the current cart from `cart-service`
