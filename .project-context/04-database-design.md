@@ -95,6 +95,11 @@ Payment and delivery records are explicit domain tables tied to orders:
 Design notes:
 
 - `payments.orderId` and `payments.customerId` are indexed for lookup and reconciliation
+- at most one **active** payment (`PENDING`, `PROCESSING`, `COMPLETED`) per order, enforced by the partial unique index `UQ_payments_active_order`; `FAILED`/`REFUNDED` rows are excluded so a failed attempt can be retried
+- `payments.idempotencyKey` stores the client's `Idempotency-Key`; unique per customer via the partial index `UQ_payments_customer_idempotency_key` (`("customerId", "idempotencyKey") WHERE "idempotencyKey" IS NOT NULL`)
+- `publishedEventStatus` / `orderSyncedStatus` record which status's Kafka event and order update have been applied, so retries only redo missing side effects; `sideEffectsLeaseUntil` is a short lease so concurrent retries don't both perform them
+- status changes use compare-and-set updates (`UPDATE ... WHERE id = ? AND status = ?`) instead of read-then-write, so concurrent requests cannot both move a payment out of the same state
+- production schema changes are applied with `services/payment-service/migrations/*.sql` (production runs with `synchronize: false`); see [docs/services/payment-service.md](../docs/services/payment-service.md#database-migration-production)
 - `deliveries.orderId` is unique, ensuring one active delivery per order
 - `deliveries.driverId` is nullable and points to the driver service’s driver record
 - drivers track separate lifecycle state such as `AVAILABLE`, `BUSY`, `OFFLINE`, and `SUSPENDED`

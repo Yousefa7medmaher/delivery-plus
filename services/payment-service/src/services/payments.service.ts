@@ -12,21 +12,43 @@ import {
   KafkaProducerService,
   TOPICS,
   PaymentEventType,
+  PaymentEvent,
   generateCorrelationId,
 } from '@food-delivery/shared';
-import { PaymentsRepository } from '../repositories/payments.repository';
+import { PaymentsRepository, isUniqueViolation } from '../repositories/payments.repository';
 import { OrderServiceClient } from '../common/order-service.client';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 import { CreatePaymentDto } from '../dto/create-payment.dto';
 import { ProcessPaymentDto } from '../dto/process-payment.dto';
-import { Payment } from '../entities/payment.entity';
-import { v4 as uuidv4 } from 'uuid';
+import { ACTIVE_PAYMENT_STATUSES, Payment, UQ_PAYMENTS_ACTIVE_ORDER } from '../entities/payment.entity';
+import { v5 as uuidv5 } from 'uuid';
 
-const ACTIVE_PAYMENT_STATUSES: PaymentStatus[] = [
-  PaymentStatus.PENDING,
-  PaymentStatus.PROCESSING,
-  PaymentStatus.COMPLETED,
-];
+/**
+ * Fixed namespace for deterministic payment event ids. Never change it: consumers
+ * deduplicate by eventId, and a new namespace would make re-published events look new.
+ */
+export const PAYMENT_EVENT_NAMESPACE = '6f1c2b9e-6a4d-4f3e-9d7a-2f0b8c1e5a47';
+
+/**
+ * Side effects owed for each payment status. A status with no entry (PROCESSING,
+ * REFUNDED) has no Kafka event or order update.
+ */
+const SIDE_EFFECTS: Partial<Record<PaymentStatus, { eventType: PaymentEventType; orderStatus: OrderStatus }>> = {
+  [PaymentStatus.PENDING]: { eventType: PaymentEventType.CREATED, orderStatus: OrderStatus.PAYMENT_PENDING },
+  [PaymentStatus.COMPLETED]: { eventType: PaymentEventType.COMPLETED, orderStatus: OrderStatus.CONFIRMED },
+  [PaymentStatus.FAILED]: { eventType: PaymentEventType.FAILED, orderStatus: OrderStatus.FAILED },
+};
+
+/** How long a request may hold the side-effects lease before another retry can take over. */
+export const SIDE_EFFECTS_LEASE_MS = 30_000;
+
+/** What to do when side effects are owed but another request holds the lease. */
+type OnBusy = 'return' | 'conflict';
+
+/** Deterministic eventId: the same (payment, event type) always yields the same id. */
+export function paymentEventId(paymentId: string, eventType: PaymentEventType): string {
+  return uuidv5(`${paymentId}:${eventType}`, PAYMENT_EVENT_NAMESPACE);
+}
 
 @Injectable()
 export class PaymentsService {
@@ -37,7 +59,28 @@ export class PaymentsService {
     private readonly kafkaProducer: KafkaProducerService,
   ) {}
 
-  async createPayment(customerId: string, dto: CreatePaymentDto, authHeader: string): Promise<Payment> {
+  /**
+   * Creates the order's payment.
+   *
+   * - One active payment per order is enforced by the database
+   *   (`UQ_payments_active_order`), so concurrent requests cannot both succeed.
+   * - With an `Idempotency-Key`, repeating the request returns the original
+   *   payment (and finishes any side effects a previous attempt left undone)
+   *   instead of failing.
+   */
+  async createPayment(
+    customerId: string,
+    dto: CreatePaymentDto,
+    authHeader: string,
+    idempotencyKey?: string,
+  ): Promise<Payment> {
+    // Replay check first: after the first attempt the order is PAYMENT_PENDING,
+    // so the order-status check below would reject a legitimate retry.
+    if (idempotencyKey) {
+      const prior = await this.payments.findByIdempotencyKey(customerId, idempotencyKey);
+      if (prior) return this.replayCreate(prior, dto);
+    }
+
     const order = await this.orderClient.getOrder(dto.orderId, authHeader);
 
     if (order.customerId !== customerId) {
@@ -47,35 +90,44 @@ export class PaymentsService {
       throw new ConflictError(`Order ${dto.orderId} is not awaiting payment (status ${order.status})`);
     }
 
+    // Fast path for a clear error. Not a guarantee: the unique index below is.
     const existing = await this.payments.findLatestByOrder(dto.orderId);
     if (existing && ACTIVE_PAYMENT_STATUSES.includes(existing.status)) {
       throw new ConflictError(`Order ${dto.orderId} already has an active payment`);
     }
 
-    const payment = await this.payments.create({
-      orderId: dto.orderId,
-      customerId,
-      amount: order.totalAmount,
-    });
+    let payment: Payment;
+    try {
+      payment = await this.payments.create({
+        orderId: dto.orderId,
+        customerId,
+        amount: order.totalAmount,
+        idempotencyKey: idempotencyKey ?? null,
+      });
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+      // Lost a race. If it was a concurrent retry with the same key, return the winner.
+      if (idempotencyKey) {
+        const winner = await this.payments.findByIdempotencyKey(customerId, idempotencyKey);
+        if (winner) return this.replayCreate(winner, dto);
+      }
+      if (isUniqueViolation(err, UQ_PAYMENTS_ACTIVE_ORDER) || !idempotencyKey) {
+        throw new ConflictError(`Order ${dto.orderId} already has an active payment`);
+      }
+      throw new ConflictError('Idempotency-Key conflict, please retry');
+    }
 
-    await this.kafkaProducer.publish(TOPICS.PAYMENT_EVENTS, {
-      eventId: uuidv4(),
-      eventType: PaymentEventType.CREATED,
-      timestamp: new Date().toISOString(),
-      correlationId: generateCorrelationId(),
-      payload: {
-        paymentId: payment.id,
-        orderId: payment.orderId,
-        amount: parseFloat(payment.amount),
-        status: payment.status,
-      },
-    });
-
-    await this.orderClient.updateOrderStatus(payment.orderId, OrderStatus.PAYMENT_PENDING);
-
-    return payment;
+    return this.completeSideEffects(payment);
   }
 
+  /**
+   * Processes a payment. Safe to retry after a client timeout:
+   * - PENDING → moves to PROCESSING via an atomic compare-and-set, so only one
+   *   concurrent request settles the payment.
+   * - PROCESSING → another request is settling it; 409 Conflict.
+   * - COMPLETED / FAILED → returns the terminal result; only side effects that
+   *   previously failed (Kafka publish, order update) are re-attempted.
+   */
   async processPayment(paymentId: string, requesterId: string, dto: ProcessPaymentDto): Promise<Payment> {
     const payment = await this.findOrThrow(paymentId);
 
@@ -83,56 +135,50 @@ export class PaymentsService {
       throw new ForbiddenError('You do not own this payment');
     }
 
-    this.assertTransition(payment.status, PaymentStatus.PROCESSING);
-    await this.payments.updateStatus(paymentId, PaymentStatus.PROCESSING);
-
-    const succeeded = this.simulateOutcome(dto.simulateFailure);
-
-    if (succeeded) {
-      this.assertTransition(PaymentStatus.PROCESSING, PaymentStatus.COMPLETED);
-      const updated = await this.payments.updateStatus(paymentId, PaymentStatus.COMPLETED);
-      
-      await this.kafkaProducer.publish(TOPICS.PAYMENT_EVENTS, {
-        eventId: uuidv4(),
-        eventType: PaymentEventType.COMPLETED,
-        timestamp: new Date().toISOString(),
-        correlationId: generateCorrelationId(),
-        payload: {
-          paymentId: updated!.id,
-          orderId: updated!.orderId,
-          amount: parseFloat(updated!.amount),
-          status: updated!.status,
-        },
-      });
-
-      await this.orderClient.updateOrderStatus(updated!.orderId, OrderStatus.CONFIRMED);
-
-      return updated as Payment;
+    if (this.isSettled(payment.status)) {
+      return this.completeSideEffects(payment);
+    }
+    if (payment.status === PaymentStatus.PROCESSING) {
+      throw new ConflictError(`Payment ${paymentId} is already being processed`);
     }
 
-    this.assertTransition(PaymentStatus.PROCESSING, PaymentStatus.FAILED);
-    const updated = await this.payments.updateStatus(
+    this.assertTransition(payment.status, PaymentStatus.PROCESSING);
+
+    // The order must be PAYMENT_PENDING before it can move to CONFIRMED/FAILED.
+    // If creation's side effects failed earlier, finish them now; if another
+    // request is finishing them, ask the client to retry rather than race it.
+    const ready = await this.completeSideEffects(payment, 'conflict');
+    if (this.hasOwedSideEffects(ready)) {
+      throw new ConflictError(`Payment ${paymentId} is being finalized, please retry`);
+    }
+
+    const claimed = await this.payments.transition(paymentId, PaymentStatus.PENDING, PaymentStatus.PROCESSING);
+    if (!claimed) {
+      const current = await this.findOrThrow(paymentId);
+      if (this.isSettled(current.status)) return this.completeSideEffects(current);
+      if (current.status === PaymentStatus.PROCESSING) {
+        throw new ConflictError(`Payment ${paymentId} is already being processed`);
+      }
+      throw new InvalidStateTransitionError('Payment', current.status, PaymentStatus.PROCESSING);
+    }
+
+    const succeeded = this.simulateOutcome(dto.simulateFailure);
+    const target = succeeded ? PaymentStatus.COMPLETED : PaymentStatus.FAILED;
+    this.assertTransition(PaymentStatus.PROCESSING, target);
+
+    const settled = await this.payments.transition(
       paymentId,
-      PaymentStatus.FAILED,
-      'Simulated payment decline',
+      PaymentStatus.PROCESSING,
+      target,
+      succeeded ? undefined : 'Simulated payment decline',
     );
+    if (!settled) {
+      // Only the request that claimed PROCESSING may settle; anything else is a bug.
+      const current = await this.findOrThrow(paymentId);
+      throw new InvalidStateTransitionError('Payment', current.status, target);
+    }
 
-    await this.kafkaProducer.publish(TOPICS.PAYMENT_EVENTS, {
-      eventId: uuidv4(),
-      eventType: PaymentEventType.FAILED,
-      timestamp: new Date().toISOString(),
-      correlationId: generateCorrelationId(),
-      payload: {
-        paymentId: updated!.id,
-        orderId: updated!.orderId,
-        amount: parseFloat(updated!.amount),
-        status: updated!.status,
-      },
-    });
-
-    await this.orderClient.updateOrderStatus(updated!.orderId, OrderStatus.FAILED);
-
-    return updated as Payment;
+    return this.completeSideEffects(await this.findOrThrow(paymentId));
   }
 
   async getStatus(paymentId: string, requesterId: string, requesterRole: UserRole): Promise<Payment> {
@@ -151,8 +197,84 @@ export class PaymentsService {
     }
 
     this.assertTransition(payment.status, PaymentStatus.REFUNDED);
-    const updated = await this.payments.updateStatus(paymentId, PaymentStatus.REFUNDED);
-    return updated as Payment;
+    const refunded = await this.payments.transition(paymentId, payment.status, PaymentStatus.REFUNDED);
+    const current = await this.findOrThrow(paymentId);
+    if (!refunded && current.status !== PaymentStatus.REFUNDED) {
+      throw new InvalidStateTransitionError('Payment', current.status, PaymentStatus.REFUNDED);
+    }
+    return current;
+  }
+
+  /** Validates that a replayed idempotency key is being reused for the same order. */
+  private replayCreate(prior: Payment, dto: CreatePaymentDto): Promise<Payment> {
+    if (prior.orderId !== dto.orderId) {
+      throw new ConflictError('Idempotency-Key was already used for a different order');
+    }
+    return this.completeSideEffects(prior);
+  }
+
+  /**
+   * Performs the Kafka publish and order update owed for the payment's current
+   * status, each at most once per status (tracked by `publishedEventStatus` /
+   * `orderSyncedStatus`), under a short lease so concurrent retries don't both
+   * perform them. If a step fails the error propagates, the payment keeps its
+   * state, and the next retry resumes from the step that failed.
+   *
+   * When another request holds the lease: `onBusy: 'return'` returns the payment
+   * as-is (its status is already final); `'conflict'` throws a retryable 409.
+   */
+  private async completeSideEffects(payment: Payment, onBusy: OnBusy = 'return'): Promise<Payment> {
+    if (!this.hasOwedSideEffects(payment)) return payment;
+
+    const leased = await this.payments.acquireSideEffectsLease(payment.id, SIDE_EFFECTS_LEASE_MS);
+    if (!leased) {
+      if (onBusy === 'conflict') {
+        throw new ConflictError(`Payment ${payment.id} is being finalized, please retry`);
+      }
+      return payment;
+    }
+
+    try {
+      // Re-read under the lease: a previous holder may have finished some steps.
+      const current = await this.findOrThrow(payment.id);
+      const effects = SIDE_EFFECTS[current.status];
+      if (!effects) return current;
+
+      if (current.publishedEventStatus !== current.status) {
+        const event: PaymentEvent = {
+          eventId: paymentEventId(current.id, effects.eventType),
+          eventType: effects.eventType,
+          timestamp: new Date().toISOString(),
+          correlationId: generateCorrelationId(),
+          payload: {
+            paymentId: current.id,
+            orderId: current.orderId,
+            amount: parseFloat(current.amount),
+            status: current.status,
+          },
+        };
+        await this.kafkaProducer.publish(TOPICS.PAYMENT_EVENTS, event);
+        await this.payments.markEventPublished(current.id, current.status);
+      }
+
+      if (current.orderSyncedStatus !== current.status) {
+        await this.orderClient.updateOrderStatus(current.orderId, effects.orderStatus);
+        await this.payments.markOrderSynced(current.id, current.status);
+      }
+    } finally {
+      await this.payments.releaseSideEffectsLease(payment.id);
+    }
+
+    return this.findOrThrow(payment.id);
+  }
+
+  private hasOwedSideEffects(payment: Payment): boolean {
+    if (!SIDE_EFFECTS[payment.status]) return false;
+    return payment.publishedEventStatus !== payment.status || payment.orderSyncedStatus !== payment.status;
+  }
+
+  private isSettled(status: PaymentStatus): boolean {
+    return status === PaymentStatus.COMPLETED || status === PaymentStatus.FAILED;
   }
 
   private assertTransition(from: PaymentStatus, to: PaymentStatus): void {

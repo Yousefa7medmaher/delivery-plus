@@ -50,6 +50,14 @@ Typical consumers include:
 - order-service for state updates
 - notification-service for user notifications
 
+Delivery semantics (payment-service):
+
+- Events are published **after** the payment row is committed and are **at-least-once**: a retry after a failed or interrupted publish may send the same event again.
+- `eventId` is deterministic: UUID v5 of `"<paymentId>:<eventType>"` in a fixed namespace (`PAYMENT_EVENT_NAMESPACE` in `payments.service.ts`). A re-published `payment.completed` for a payment always has the same `eventId`, so consumers must deduplicate by `eventId` (the shared `KafkaConsumerService` already skips ids it has processed; its store is in-memory, so durable dedup across restarts is consumer-side work).
+- Each payment emits at most one event per type in normal operation; `publishedEventStatus` on the payment row tracks what was already published.
+- The payload shape `{ paymentId, orderId, amount, status }` and event type names are unchanged; `eventId` remains a UUID, so existing consumers are unaffected.
+- The order-service status update is a separate HTTP call, not driven by the event; it is tracked the same way (`orderSyncedStatus`) and retried by the client's next `process`/create retry, not by Kafka.
+
 ### delivery.events
 
 This topic captures delivery lifecycle changes:
