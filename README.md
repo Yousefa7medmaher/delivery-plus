@@ -136,8 +136,20 @@ cd delivery-plus
 # install dependencies
 npm install
 
-# spin up Postgres, Redis, Kafka and every service
-docker-compose up --build
+# local dev stack: shared infra + application services
+# use the default dev workflow for day-to-day development
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up --build
+```
+
+For environment-specific validation:
+
+```bash
+# deterministic test layout
+docker compose -f docker-compose.base.yml -f docker-compose.test.yml config --quiet
+
+# production-like validation (requires secrets explicitly)
+$env:POSTGRES_USER='postgres'; $env:POSTGRES_PASSWORD='postgres'; $env:JWT_SECRET='super-secret'
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config --quiet
 ```
 
 ### Seed sample data
