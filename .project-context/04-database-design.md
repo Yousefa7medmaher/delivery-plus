@@ -80,7 +80,10 @@ The `Order` entity includes:
 - `restaurantId`
 - `status` with `OrderStatus` enum
 - `totalAmount` as decimal
+- `idempotencyKey` for customer-scoped order creation deduplication
 - nested `OrderItem[]` via TypeORM cascade
+
+The order table uses a partial unique index `UQ_orders_customer_idempotency_key` on `("customerId", "idempotencyKey") WHERE "idempotencyKey" IS NOT NULL`, so a client key cannot create two different orders for the same customer. This protects the cart-to-order transition from duplicate retries and concurrent duplicate submissions.
 
 This makes a single order a unit of orchestration and state progression across payment, delivery, and notification domains.
 
