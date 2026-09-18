@@ -167,6 +167,10 @@ $env:JWT_SECRET="compose_validation_only_jwt_9a41d8"
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config --quiet
 ```
 
+### API documentation
+
+Each HTTP service exposes Swagger UI at `http://localhost:<service-port>/docs`, and the API Gateway aggregates the service docs at `http://localhost:3000/docs`.
+
 ### Seed sample data
 
 ```bash
