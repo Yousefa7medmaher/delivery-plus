@@ -6,19 +6,14 @@ import { HealthController } from './controllers/health.controller';
 import { ConfigModule } from './config/config.module';
 import { loadConfig } from './config/app-config';
 import { Restaurant } from './entities/restaurant.entity';
+import { buildTypeOrmConfig } from './database/typeorm.config';
 
 const config = loadConfig();
 
 @Module({
   imports: [
     ConfigModule,
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      url: config.databaseUrl,
-      entities: [Restaurant],
-      synchronize: config.nodeEnv !== 'production',
-      logging: false,
-    }),
+    TypeOrmModule.forRoot(buildTypeOrmConfig(config.databaseUrl, [Restaurant])),
     RedisModule.register({ url: process.env.REDIS_URL || 'redis://localhost:6379' }),
     RestaurantsModule,
   ],

@@ -115,6 +115,31 @@ Notifications are append-only user inbox records. They are not ephemeral UI stat
 
 This table keeps `userId`, `type`, `title`, `message`, and `isRead` so notification delivery can be retried or reviewed later.
 
+## Database migration workflow
+
+Schema creation follows a migration-first model rather than runtime `synchronize`:
+
+- [docker/postgres/init.sql](../docker/postgres/init.sql) creates the logical PostgreSQL databases for each service.
+- application tables are created by TypeORM migrations, not by `synchronize: true`.
+- every PostgreSQL-backed service uses `buildTypeOrmConfig(...)` with `synchronize: false` and `migrationsRun: false`.
+- the migration history table is managed by TypeORM and records successfully applied migrations.
+
+Local workflow:
+
+1. Start the shared infrastructure (`postgres`, `redis`, `zookeeper`, `kafka`) with Docker Compose.
+2. Ensure the target logical database exists; `docker/postgres/init.sql` creates these databases on first container init.
+3. Run the service migration command from the service workspace, for example `npm run migration:run --workspace=@food-delivery/order-service`.
+4. Verify the migration table and tables for that service exist before deploying or starting the app container.
+
+Production expectations:
+
+- migrations are forward-only; do not edit previously applied migration files.
+- the migration history is the source of truth for applied schema changes.
+- rolling back a migration is limited to recovery scenarios and should not be treated as a normal release step.
+- database drift should be fixed by new migration files, not by enabling runtime schema sync.
+
+This keeps the database schema explicit, repeatable, and safe for the repository’s Docker-based deployments.
+
 ## Redis usage
 
 Redis is not treated as a general database. It is used for high-churn runtime data:

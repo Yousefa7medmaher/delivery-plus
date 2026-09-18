@@ -6,8 +6,12 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
-      "lint": "eslint src --ext .ts",
-    "test": "jest --passWithNoTests"
+    "lint": "eslint src --ext .ts",
+    "test": "jest --passWithNoTests",
+    "migration:generate": "node ../../scripts/typeorm-migration-runner.js menu-service run",
+    "migration:run": "node ../../scripts/typeorm-migration-runner.js menu-service run",
+    "migration:revert": "node ../../scripts/typeorm-migration-runner.js menu-service revert",
+    "migration:show": "node ../../scripts/typeorm-migration-runner.js menu-service show"
   },
   "dependencies": {
     "@food-delivery/shared": "0.1.0",

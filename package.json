@@ -11,7 +11,11 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:ci": "npm run lint && npm test && npm run build",
-    "verify": "npm run test:ci"
+    "verify": "npm run test:ci",
+    "migration:generate": "npm run migration:generate --workspaces --if-present",
+    "migration:run": "npm run migration:run --workspaces --if-present",
+    "migration:revert": "npm run migration:revert --workspaces --if-present",
+    "migration:show": "npm run migration:show --workspaces --if-present"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.18.0",

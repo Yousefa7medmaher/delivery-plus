@@ -7,18 +7,14 @@ import { APP_CONFIG, AppConfig } from './config/app-config';
 import { HealthController } from './controllers/health.controller';
 import { NotificationsModule } from './modules/notifications.module';
 import { Notification } from './entities/notification.entity';
+import { buildTypeOrmConfig } from './database/typeorm.config';
 
 @Module({
   imports: [
     ConfigModule,
     TypeOrmModule.forRootAsync({
       inject: [APP_CONFIG],
-      useFactory: (config: AppConfig) => ({
-        type: 'postgres',
-        url: config.databaseUrl,
-        entities: [Notification],
-        synchronize: true, // dev only
-      }),
+      useFactory: (config: AppConfig) => buildTypeOrmConfig(config.databaseUrl, [Notification]),
     }),
     JwtModule.registerAsync({
       global: true,
