@@ -1,19 +1,19 @@
 import { join } from 'node:path';
 import { QueryRunner } from 'typeorm';
-import { Notification } from '../entities/notification.entity';
+import { Delivery } from '../entities/delivery.entity';
 import { AppDataSource, default as defaultDataSource } from './data-source';
 import { InitialSchema1700000000000 } from './migrations/001-initial-schema';
 import { buildTypeOrmConfig } from './typeorm.config';
 
-const databaseUrl = 'postgres://db.example.test:5432/notification';
+const databaseUrl = 'postgres://db.example.test:5432/delivery';
 
 describe('buildTypeOrmConfig', () => {
   it('builds a production-safe PostgreSQL configuration', () => {
-    const config = buildTypeOrmConfig(databaseUrl, [Notification]);
+    const config = buildTypeOrmConfig(databaseUrl, [Delivery]);
     expect(config).toMatchObject({
       type: 'postgres',
       url: databaseUrl,
-      entities: [Notification],
+      entities: [Delivery],
       synchronize: false,
       migrationsRun: false,
       logging: false,
@@ -44,7 +44,7 @@ describe('AppDataSource', () => {
   it('wires the service entity without connecting or enabling implicit schema changes', () => {
     const entities = AppDataSource.options.entities as Array<{ name?: string }>;
     expect(defaultDataSource).toBe(AppDataSource);
-    expect(entities.map((entity) => entity.name)).toEqual(['Notification']);
+    expect(entities.map((entity) => entity.name)).toEqual(['Delivery']);
     expect(AppDataSource.options.synchronize).toBe(false);
     expect(AppDataSource.options.migrationsRun).toBe(false);
     expect(AppDataSource.isInitialized).toBe(false);
