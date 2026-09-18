@@ -3,6 +3,10 @@ import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { join } from 'node:path';
 import { DataSourceOptions } from 'typeorm';
 
+/**
+ * Builds the TypeORM options shared by the Nest application and migration CLI.
+ * Custom options are applied last and override the service defaults.
+ */
 export function buildTypeOrmConfig(
   databaseUrl: string,
   entities: Array<Type<unknown> | string>,
