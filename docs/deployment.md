@@ -53,6 +53,53 @@ Listener summary:
 - Host development tools → `localhost:9092`
 - Kafka UI → `localhost:8085`
 
+## Database migrations
+
+This repository uses a migration-first database workflow for every PostgreSQL-backed service.
+
+### Local generation and execution
+
+Start the infrastructure first:
+
+```bash
+docker compose up -d postgres redis zookeeper kafka
+```
+
+Create or update the service schema from the service folder:
+
+```bash
+npm run migration:generate --workspace=@food-delivery/order-service
+npm run migration:run --workspace=@food-delivery/order-service
+npm run migration:show --workspace=@food-delivery/order-service
+```
+
+The generated migration files live under each service’s `src/database/migrations` directory. The migration history is tracked in the service database by TypeORM.
+
+### Fresh database initialization
+
+The Postgres container creates the logical service databases through [docker/postgres/init.sql](../docker/postgres/init.sql). That file creates databases such as `auth_service`, `user_service`, `menu_service`, `order_service`, and `payment_service`.
+
+Application tables are created by TypeORM migrations. Do not rely on runtime schema sync. The repository intentionally keeps `synchronize: false` and `migrationsRun: false` for the service TypeORM configuration.
+
+### Production migration execution
+
+The Docker image startup path runs the service migration before the Node process starts. This means the production-safe flow is:
+
+1. build the image
+2. start the Postgres container
+3. let the app container execute its migration
+4. start the service only after migration success
+
+This matches the repository’s Docker Compose deployment pattern and avoids `synchronize: true` creating implicit schema drift.
+
+### Forward-only expectations and rollback limitations
+
+- migration files are expected to be forward-only once they are published
+- do not edit an already-applied migration in a shared environment
+- new schema changes must be created as new migration files
+- rollback is limited to recovery and local cleanup; it is not the normal deployment path
+- schema recovery should be performed with a new migration or a controlled maintenance window, not by re-running `synchronize`
+
 ## CI Expectations
 
 CI runs `npm ci`, lint, tests, TypeScript builds, Compose validation, and an API Gateway image build. Trivy scans the filesystem and the built image for unfixed CRITICAL vulnerabilities and secrets. CI does not require production credentials or start the full infrastructure.

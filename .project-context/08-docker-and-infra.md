@@ -91,6 +91,20 @@ Most services receive connection URLs like:
 
 The stack includes Kafka UI for broker inspection and service health checks for container readiness. This is enough for local development and debugging, but not for a full production observability stack.
 
+## Database bootstrap and migration flow
+
+The Compose stack uses a service-owned Postgres model. The Postgres container is named `postgres` and is configured with:
+
+- `POSTGRES_USER=${POSTGRES_USER:-postgres}`
+- `POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}`
+- logical databases created by [docker/postgres/init.sql](../docker/postgres/init.sql)
+
+This init script creates one logical database per service, such as `auth_service`, `user_service`, `order_service`, and `payment_service`. The Dockerized app services then connect using `DATABASE_URL` values such as `postgres://postgres:postgres@postgres:5432/order_service`.
+
+The service applications are intentionally configured with `synchronize: false` and `migrationsRun: false` in their TypeORM config. That means the schema is created by TypeORM migration files stored under each service’s `src/database/migrations` directory, and the migration history table is used to track applied versions.
+
+In Docker-based startup, each built service image runs the migration step before the application process starts. This is the repository’s deployment-safe path for fresh databases and local development, and it prevents untracked schema creation from runtime sync.
+
 ## Operational caveats
 
 A few important caveats are worth keeping in mind:
@@ -99,6 +113,8 @@ A few important caveats are worth keeping in mind:
 - service startup order matters, especially for Kafka and Postgres initialization
 - environment defaults are intentionally simple and may be replaced in real deployments
 - container health checks assume the service exposes `/health` correctly
+- database schema changes must be shipped as migrations; runtime `synchronize` is disabled
+- a migration is intended to be forward-only once it has run in shared environments
 
 ## Source of truth
 

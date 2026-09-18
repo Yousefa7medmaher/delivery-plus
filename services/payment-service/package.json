@@ -8,10 +8,10 @@
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "lint": "eslint src --ext .ts",
     "test": "jest --passWithNoTests",
-    "migration:generate": "ts-node --transpile-only ./node_modules/typeorm/cli.js migration:generate -d src/database/data-source.ts",
-    "migration:run": "ts-node --transpile-only ./node_modules/typeorm/cli.js migration:run -d src/database/data-source.ts",
-    "migration:revert": "ts-node --transpile-only ./node_modules/typeorm/cli.js migration:revert -d src/database/data-source.ts",
-    "migration:show": "ts-node --transpile-only ./node_modules/typeorm/cli.js migration:show -d src/database/data-source.ts"
+    "migration:generate": "node ../../scripts/typeorm-migration-runner.js payment-service run",
+    "migration:run": "node ../../scripts/typeorm-migration-runner.js payment-service run",
+    "migration:revert": "node ../../scripts/typeorm-migration-runner.js payment-service revert",
+    "migration:show": "node ../../scripts/typeorm-migration-runner.js payment-service show"
   },
   "dependencies": {
     "@food-delivery/shared": "0.1.0",

@@ -76,17 +76,25 @@ Before settling a `PENDING` payment, `process` first finishes any creation side 
 - The same crash window exists for the order update. If order-service rejects the repeated update as an invalid transition (the order is already `CONFIRMED`), the retry returns that error; the payment itself stays correct.
 - If a process dies after claiming `PROCESSING` and before settling, the payment stays `PROCESSING` and `process` returns `409`. A real provider integration would reconcile by querying the provider; with the simulator this needs manual repair.
 
-## Database migration (production)
+## Database migration workflow
 
-Production runs with `synchronize: false`. Apply `services/payment-service/migrations/20260917_payment_idempotency.sql` to the `payment_service` database **before** deploying this version:
+This service follows the repository-wide migration-first pattern.
 
-1. Run the pre-check query at the top of the script. If any order has more than one active payment, resolve it first (keep the `COMPLETED` or oldest one, mark the others `FAILED`); otherwise the unique index cannot be built.
-2. Run the script with `psql` (not inside an explicit transaction: the indexes use `CREATE INDEX CONCURRENTLY`). It is idempotent.
-3. Deploy the service.
+- [docker/postgres/init.sql](../../docker/postgres/init.sql) creates the logical `payment_service` database.
+- TypeORM creates the actual schema via the migration in `services/payment-service/src/database/migrations/001-initial-schema.ts`.
+- runtime `synchronize` remains disabled; the application does not depend on automatic schema creation.
+- the migration history table records the applied migration and prevents repeated schema creation.
 
-The script backfills the side-effect markers for existing payments so the new code does not re-publish historical events. Deploying the code before the script makes every payment query fail, because the new columns are missing. The old code keeps working after the script runs, so the rollback path is simply redeploying the previous version.
+For local development:
 
-In development (`synchronize: true`) TypeORM creates the columns and indexes automatically.
+```bash
+npm run migration:run --workspace=@food-delivery/payment-service
+npm run migration:show --workspace=@food-delivery/payment-service
+```
+
+For Docker-based startup, the service image runs the migration before the service process starts. The expected flow is: Postgres container ready → migration executes → service boots successfully.
+
+This keeps the `payment_service` database aligned with the entity definitions in [services/payment-service/src/entities/payment.entity.ts](../../services/payment-service/src/entities/payment.entity.ts) and preserves the repository’s production-safe migration model.
 
 ## Dependencies
 - Calls `order-service` to confirm order ownership and update status

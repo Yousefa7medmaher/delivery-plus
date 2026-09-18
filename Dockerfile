@@ -59,4 +59,4 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
 COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/services/${SERVICE_NAME}/dist ./services/${SERVICE_NAME}/dist
 
-CMD ["sh", "-c", "node services/${SERVICE_NAME}/dist/main.js"]
+CMD ["sh", "-c", "node ./node_modules/typeorm/cli.js migration:run -d ./services/${SERVICE_NAME}/dist/database/data-source.js && node services/${SERVICE_NAME}/dist/main.js"]
