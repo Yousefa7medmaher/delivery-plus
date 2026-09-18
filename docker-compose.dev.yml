@@ -1,4 +1,8 @@
 services:
+  kafka:
+    ports:
+      - '127.0.0.1:9092:9092'
+
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     restart: unless-stopped

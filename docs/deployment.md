@@ -45,7 +45,13 @@ The root multi-stage `Dockerfile` accepts `SERVICE_NAME` and builds the shared p
 
 PostgreSQL creates these logical databases: `auth_service`, `user_service`, `restaurant_service`, `menu_service`, `order_service`, `payment_service`, `driver_service`, `delivery_service`, and `notification_service`. Compose passes each service its own database URL.
 
-Internal containers communicate using Docker DNS names such as `http://order-service:3006`, `redis://redis:6379`, and `kafka:29092`. The local Kafka listener exposed to the host is `localhost:9092`.
+Internal containers communicate using Docker DNS names such as `http://order-service:3006`, `redis://redis:6379`, and `kafka:29092`. For local host access, Kafka is published as `127.0.0.1:9092` and is reachable from tools running on the machine as `localhost:9092`. Kafka UI remains exposed locally on `127.0.0.1:8085` and connects to the Compose network via `kafka:29092`.
+
+Listener summary:
+
+- Docker services → `kafka:29092`
+- Host development tools → `localhost:9092`
+- Kafka UI → `localhost:8085`
 
 ## CI Expectations
 
