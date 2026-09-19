@@ -10,6 +10,10 @@ Operational notes and incident-response guides live here.
 - Common production incident flow
 - Rollback and recovery steps
 
+## Available runbooks
+
+- [Local stack troubleshooting](./local-stack-troubleshooting.md) - Compose validation, healthcheck limitations, migrations, Kafka, and Redis checks
+
 ## Suggested format
 
 Each runbook should be a focused guide with:

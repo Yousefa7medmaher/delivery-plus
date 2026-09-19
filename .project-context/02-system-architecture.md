@@ -27,7 +27,7 @@ flowchart LR
 
     ORD -.->|order.events| KAFKA[(Kafka)]
     PAY -.->|payment.events| KAFKA
-    DEL -.->|delivery.events| KAFKA
+    DEL -.->|delivery.events wiring| KAFKA
 
     KAFKA -.->|events| NOTIF
     KAFKA -.->|events| DRV

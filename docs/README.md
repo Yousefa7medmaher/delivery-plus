@@ -28,4 +28,4 @@ This folder is the main human-readable documentation hub for the repository.
 
 ## Notes
 
-The project is structured as a Node.js + NestJS microservice platform with PostgreSQL, Redis, and Kafka backing the domain services. For implementation details, prefer the service pages and the root README; they reflect the current code in the repository.
+The project is structured as a Node.js 20 + NestJS 10 microservice platform with PostgreSQL 16, Redis 7, and Kafka backing the domain services. For implementation details, prefer the service pages and the root README; planned roadmap work must not be read as implemented behavior.

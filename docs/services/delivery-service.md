@@ -18,12 +18,15 @@ From `services/delivery-service/src/controllers/deliveries.controller.ts`:
 - Calls `order-service` to validate order state and update order status
 - Calls `driver-service` to find and update drivers
 - Uses PostgreSQL for delivery records
-- Publishes `delivery.events` to Kafka
+- Contains partial `delivery.events` publication wiring
 
 ## Events published/consumed
-Published to `delivery.events`:
+The service contains Kafka wiring and event-building code for `delivery.events`, including:
+
 - dispatch/assignment updates
 - pickup/in-transit/complete/cancel transitions
+
+The current lifecycle methods do not consistently invoke the publisher, so delivery event propagation is partial and must not be treated as fully implemented.
 
 Consumed from:
 - none directly implemented in this service
@@ -40,4 +43,4 @@ From `services/delivery-service/src/config/app-config.ts`:
 - `NODE_ENV` (default: `development`)
 
 ## Notes
-Driver assignment is a core orchestration task in this service, with explicit role checks and transition rules.
+Driver assignment is a core orchestration task in this service, with explicit transition rules. Some role restrictions are enforced inside the service rather than uniformly at the controller boundary.

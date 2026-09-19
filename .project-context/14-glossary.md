@@ -13,7 +13,7 @@ The Redis-backed service that manages a customer’s current shopping cart.
 The auth record that stores a user’s email, hashed password, and role.
 
 ## Delivery Service
-The service responsible for delivery lifecycle management, including assignment and completion events.
+The service responsible for delivery lifecycle management, including assignment, completion, and currently partial Kafka event publication.
 
 ## Driver Service
 The service that owns driver records, status, availability, and driver-specific metadata.

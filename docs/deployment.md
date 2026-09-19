@@ -6,18 +6,18 @@ Use Node.js 20+, npm, and Docker Desktop with Compose v2. Copy `.env.example` to
 
 ## Docker Compose
 
-This repository uses the single Compose file at [docker-compose.yml](../docker-compose.yml). It starts the shared PostgreSQL 16, Redis 7, Zookeeper, Kafka, and Kafka UI containers alongside the application services.
+This repository provides a full local Compose file at [docker-compose.yml](../docker-compose.yml) plus committed base, development, test, and production overlays. The base file defines PostgreSQL 16, Redis 7, Zookeeper, and Kafka; the overlays add application services and environment-specific ports/configuration. `docker-compose.override.yml` is ignored for local-only customization.
 
 ```bash
-# start infra only
-docker compose up -d postgres redis zookeeper kafka
+# start the committed full local stack
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up -d --build
 
 # start the full stack
 docker compose up -d --build
 
-# validate the compose graph in Linux/WSL
-docker compose config --quiet
-docker compose ps
+# validate the committed development graph in Linux/WSL
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml config --quiet
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml ps --all
 ```
 
 ```powershell
@@ -30,7 +30,7 @@ The root multi-stage `Dockerfile` accepts `SERVICE_NAME` and builds the shared p
 
 PostgreSQL creates these logical databases: `auth_service`, `user_service`, `restaurant_service`, `menu_service`, `order_service`, `payment_service`, `driver_service`, `delivery_service`, and `notification_service`. Compose passes each service its own database URL via `DATABASE_URL`.
 
-The project was validated in WSL using the same Docker Compose stack that the repo ships: `docker compose config --quiet` and `docker compose up -d --wait postgres redis zookeeper kafka` both succeeded, and the service database migration path was exercised against the real Postgres container.
+The repository provides Compose validation commands, but this document does not claim that the full stack has been started successfully in every environment. Validate the local runtime with `docker compose config --quiet`, `docker compose ps`, and targeted service logs.
 
 Internal containers communicate using Docker DNS names such as `http://order-service:3006`, `redis://redis:6379`, and `kafka:29092`. For local host access, Kafka is published as `127.0.0.1:9092` and is reachable from tools running on the machine as `localhost:9092`. Kafka UI remains exposed locally on `127.0.0.1:8085` and connects to the Compose network via `kafka:29092`.
 
@@ -77,7 +77,7 @@ The Docker image startup path runs the service migration before the Node process
 3. let the app container execute its migration
 4. start the service only after migration success
 
-This matches the repository’s Docker Compose deployment pattern and avoids `synchronize: true` creating implicit schema drift.
+This is the intended Docker image startup path and avoids `synchronize: true` creating implicit schema drift. Existing databases still require care: the payment service also contains a manual SQL upgrade under `services/payment-service/migrations/` that is not part of the normal TypeORM migration runner.
 
 ### Forward-only expectations and rollback limitations
 

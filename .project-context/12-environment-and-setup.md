@@ -2,7 +2,7 @@
 
 ## Local run model
 
-This project is meant to run with a Docker Compose-based local stack for infrastructure and all application services. The main orchestration file is:
+This project is intended to run with a Docker Compose-based local stack for infrastructure and all application services. The main orchestration file is:
 
 - [docker-compose.yml](../docker-compose.yml)
 
@@ -51,7 +51,7 @@ A practical developer flow is:
 
 1. install Node dependencies from the workspace root
 2. run the stack with Docker Compose
-3. confirm services health
+3. confirm service health routes and inspect the gateway healthcheck mismatch
 4. use the gateway on port `3000`
 5. inspect Kafka on `localhost:8085` via Kafka UI if needed
 
@@ -90,7 +90,7 @@ These names are used inside Docker networking and are not necessarily meant to b
 ## Notes for contributors
 
 - service URLs and ports are defined centrally in compose, not hidden in code
-- stack startup is expected to be reproducible with the repo’s compose setup
+- stack startup is configuration-driven, but full readiness is not guaranteed by the current gateway healthcheck
 - local defaults are suitable for development, not for production credentials or security settings
 
 ## Source of truth

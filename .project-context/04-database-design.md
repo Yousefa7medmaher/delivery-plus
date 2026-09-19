@@ -109,7 +109,7 @@ Design notes:
 
 ### Notification storage
 
-Notifications are append-only user inbox records. They are not ephemeral UI state; they are persisted domain records:
+Notifications are append-only user inbox records. They are not ephemeral UI state; they are persisted domain records when a supported event handler creates them. Payment and delivery notification handlers are currently no-ops:
 
 - [services/notification-service/src/entities/notification.entity.ts](../services/notification-service/src/entities/notification.entity.ts)
 

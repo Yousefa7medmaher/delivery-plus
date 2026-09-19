@@ -21,7 +21,7 @@ The gateway routes are defined in `services/api-gateway/src/main.ts`:
 The service listens on port `3000` by default and is configured via environment variables such as `AUTH_SERVICE_URL`, `USER_SERVICE_URL`, `ORDER_SERVICE_URL`, etc.
 
 ## Dependencies
-- Depends on all application services for proxying and health checks.
+- Depends on all application services for proxying and Compose dependency checks.
 - Does not own a database.
 
 ## Events published/consumed
@@ -41,5 +41,9 @@ The service listens on port `3000` by default and is configured via environment 
 - `TRACKING_SERVICE_URL` (default: `http://localhost:3010`)
 - `NOTIFICATION_SERVICE_URL` (default: `http://localhost:3011`)
 
+## Health and readiness
+
+The gateway currently has no controller or `/health` route. Compose still probes `http://localhost:3000/health`, so the gateway healthcheck is a known mismatch rather than a working readiness endpoint.
+
 ## Notes
-The gateway is intentionally thin; business logic stays in the downstream services. See the root [README](../../README.md) and the service docs index in [../services.md](../services.md).
+The gateway is intentionally thin; business logic stays in the downstream services. It does not enforce all authorization itself; downstream services validate JWTs and roles. See the root [README](../../README.md) and the service docs index in [../services.md](../services.md).

@@ -46,6 +46,31 @@ The gateway acts as a reverse proxy and documentation front door, but it is not 
 
 The workspace root defines commands, but actual validation is still service-specific and environment-aware. This means contributors should expect to run targeted checks and inspect health endpoints rather than rely on one single all-encompassing test suite.
 
+## 11. Current implementation gaps
+
+- The API Gateway has no `/health` controller even though Compose probes that path.
+- Kafka deduplication is in-memory, and exhausted consumer messages are committed without a real DLQ.
+- Delivery event publication is wired but not invoked by the current lifecycle methods.
+- Notification payment and delivery handlers are currently no-ops.
+- Internal user profile creation is unauthenticated, and user profile lookup does not enforce ownership/admin access.
+- Outbound service HTTP clients use native `fetch` without a shared timeout, retry, or circuit-breaker policy.
+- The payment service contains a manual SQL idempotency upgrade outside the normal TypeORM migration runner.
+- CI does not start Compose, execute migrations, run gateway-to-service integration tests, run the E2E script, or collect coverage.
+
+These are documented findings from the current source, not claims that the application should be changed as part of documentation work. Related GitHub roadmap items remain open unless the repository and GitHub state prove otherwise.
+
+## 12. Roadmap and history snapshot
+
+The authenticated GitHub repository currently contains 55 roadmap issues mapped to the active local DP set: 50 open and 5 closed historical items. The closed items cover order idempotency, payment concurrency, production schema synchronization, Compose profiles, and service-level Swagger documentation. The remaining issues are roadmap work, not evidence that the corresponding behavior is implemented.
+
+Recent repository history confirms these completed code/documentation themes:
+
+- production database migration workflow was merged through PR #29 and is present in the Docker startup path
+- service Swagger/OpenAPI DTO metadata was standardized through PR #27
+- environment-specific Compose files and host Kafka exposure were merged through PR #25
+- order creation idempotency was merged through PR #21
+- the latest commit (`5b8f306`) ignores local roadmap and issue tooling, so local issue files are not tracked source artifacts
+
 ## Source of truth
 
 - Compose stack: [docker-compose.yml](../docker-compose.yml)

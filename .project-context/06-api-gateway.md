@@ -58,7 +58,7 @@ The gateway sets up Swagger endpoints and exposes grouped API documentation, mak
 
 ## Health and readiness
 
-The gateway exposes a health route and is included in the compose healthcheck flow, which means the stack waits for all app services to be reachable before considering the deployment healthy.
+The gateway currently has no controller or `/health` route. Compose nevertheless probes `http://localhost:3000/health`, so the gateway healthcheck is a known mismatch and should not be documented as a working readiness signal. The downstream domain services expose the health routes used by their Compose checks.
 
 This is documented in:
 
@@ -72,7 +72,7 @@ The gateway acts as the boundary where client requests are routed, but the actua
 - token is passed on subsequent requests
 - downstream services validate those tokens and roles as needed
 
-The gateway should not be treated as the only enforcement layer; actual permission logic should still happen in the application services.
+The gateway should not be treated as the only enforcement layer; actual permission logic still happens in application services. There is no standardized service-to-service credential or signature scheme yet, and the internal user-profile creation route is currently unauthenticated.
 
 ## Current architecture assumptions
 

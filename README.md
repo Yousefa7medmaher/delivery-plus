@@ -7,10 +7,10 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-red.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D18-red.svg" alt="Node >= 18">
-  <img src="https://img.shields.io/badge/NestJS-11-red.svg?logo=nestjs&logoColor=white" alt="NestJS">
+  <img src="https://img.shields.io/badge/NestJS-10-red.svg?logo=nestjs&logoColor=white" alt="NestJS 10">
   <img src="https://img.shields.io/badge/TypeScript-5-red.svg?logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/Docker-ready-red.svg?logo=docker&logoColor=white" alt="Docker Ready">
-  <img src="https://img.shields.io/badge/PostgreSQL-15-red.svg?logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/PostgreSQL-16-red.svg?logo=postgresql&logoColor=white" alt="PostgreSQL 16">
   <img src="https://img.shields.io/badge/Redis-cache-red.svg?logo=redis&logoColor=white" alt="Redis">
   <img src="https://img.shields.io/badge/Kafka-events-red.svg?logo=apachekafka&logoColor=white" alt="Kafka">
 </p>
@@ -20,7 +20,7 @@
   <img src="https://img.shields.io/badge/open%20source-yes-red.svg" alt="Open Source">
   <img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="Build Passing">
   <img src="https://img.shields.io/badge/code%20style-eslint-red.svg" alt="Code Style: ESLint">
-  <img src="https://img.shields.io/badge/tests-jest-red.svg?logo=jest&logoColor=white" alt="Tests: Jest">
+  <img src="https://img.shields.io/badge/tests-jest-red.svg?logo=jest&logoColor=white" alt="Tests: Jest (workspace tests)">
 </p>
 
 <p align="center">
@@ -37,7 +37,7 @@
 
 ## <img src="./assets/icons/overview.png" width="26" valign="middle"> Overview
 
-**Delivery Plus** is the backend engine behind a full-scale food delivery platform, built as a set of independently deployable **microservices** that communicate over REST and **Kafka** events. Every domain — auth, restaurants, menus, carts, orders, payments, drivers, deliveries, tracking, notifications and users — lives in its own service with its own database access layer, so teams can build, test, and ship each piece on its own schedule without stepping on each other.
+**Delivery Plus** is a backend food-delivery platform built as independently deployable **microservices** that communicate over REST and **Kafka** events. Domain responsibilities are separated across auth, users, restaurants, menus, carts, orders, payments, drivers, deliveries, tracking, and notifications. PostgreSQL-backed services own relational data; cart and tracking use Redis; the gateway owns no domain data.
 
 This is a **backend-only** repository — no frontend/UI is included here by design. It's meant to be consumed by web, mobile, or third-party clients through the **API Gateway**.
 
@@ -61,7 +61,7 @@ flowchart LR
     PAY --> ORD
 
     ORD -. events .-> KAFKA[(Kafka)]
-    DEL[Delivery Service] -. events .-> KAFKA
+    DEL[Delivery Service] -. partial event wiring .-> KAFKA
     DRV[Driver Service] -. events .-> KAFKA
     TRK[Tracking Service] -. events .-> KAFKA
     NOTIF[Notification Service] -. events .-> KAFKA
@@ -86,7 +86,7 @@ flowchart LR
     DEL --> PG
 ```
 
-Every service is self-contained (own `src`, `dto`, `entities`, `repositories`, `controllers`) and shares a common foundation through the internal `shared` library — logging, Kafka producer/consumer, Redis caching, JWT/roles guards, error handling, and correlation-ID middleware.
+Every service is self-contained and shares a common foundation through the internal `shared` library. The shared package provides enums, transition helpers, Kafka/Redis helpers, JWT and role guards, logging, and common NestJS utilities. Kafka reliability is currently limited: retries are process-local, deduplication is in-memory, and the documented DLQ path is not implemented.
 
 ## <img src="./assets/icons/tech_stack.png" width="26" valign="middle"> Tech Stack
 
@@ -118,7 +118,7 @@ Every service is self-contained (own `src`, `dto`, `entities`, `repositories`, `
 | `tracking-service` | Live location tracking (Redis-backed) |
 | `notification-service` | User notifications |
 
-Each service exposes a `/health` endpoint and follows the same internal layout: `controllers → services → repositories → entities`.
+The domain services expose `/health` routes used by Compose healthchecks. The API Gateway is an exception: it currently has no health controller, although Compose still probes `/health` on port `3000`; treat that healthcheck as a known runtime gap. Services generally follow `controllers → services → repositories/entities`, with variations by service.
 
 ## <img src="./assets/icons/getting_started.png" width="26" valign="middle"> Getting Started
 
@@ -171,13 +171,7 @@ docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config --qu
 
 Each HTTP service exposes Swagger UI at `http://localhost:<service-port>/docs`, and the API Gateway aggregates the service docs at `http://localhost:3000/docs`.
 
-### Seed sample data
-
-```bash
-npm run seed
-```
-
-The API Gateway will be available at `http://localhost:<gateway-port>` — see [`docs/deployment.md`](./docs/deployment.md) for full port/env configuration.
+The API Gateway will be available at `http://localhost:3000`; see [`docs/deployment.md`](./docs/deployment.md) for the Compose variants, ports, and environment configuration. The repository contains `scripts/seed.ts` and `scripts/e2e.ts`, but the root `package.json` does not currently expose `npm run seed` or `npm run e2e` scripts.
 
 ## <img src="./assets/icons/testing.png" width="26" valign="middle"> Testing
 
@@ -185,9 +179,11 @@ The API Gateway will be available at `http://localhost:<gateway-port>` — see [
 # unit tests for a given service
 npm run test --workspace=services/order-service
 
-# end-to-end tests across the stack
-npm run e2e
+# complete repository validation used by CI
+npm run verify
 ```
+
+`npm run verify` runs workspace lint, tests, and builds. CI also validates Compose syntax, builds the API Gateway image, and runs Trivy filesystem and image scans. It does not start the full stack or run the E2E script.
 
 ## <img src="./assets/icons/docs.png" width="26" valign="middle"> Documentation
 

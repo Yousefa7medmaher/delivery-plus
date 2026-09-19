@@ -1,7 +1,7 @@
 # Notification Service
 
 ## Purpose
-Stores user notifications and subscribes to Kafka events to notify clients when order, payment, or delivery events occur.
+Stores user notifications and subscribes to Kafka events. Order notification handling is implemented; payment and delivery handlers currently contain no-op behavior pending customer/order lookup and contract work.
 
 ## Main REST endpoints
 From `services/notification-service/src/controllers/notifications.controller.ts`:
@@ -13,13 +13,19 @@ From `services/notification-service/src/controllers/notifications.controller.ts`
 ## Dependencies
 - Uses PostgreSQL to persist notifications
 - Subscribes to Kafka topics emitted by order, payment, and delivery flows
-- Consumes events and records notifications for the receiving user
+- Consumes events and records supported notifications for the receiving user
 
 ## Events published/consumed
-Consumed from:
+Subscribed to:
 - `order.events`
 - `payment.events`
 - `delivery.events`
+
+Current handler status:
+
+- order events: implemented notification persistence
+- payment events: subscribed, handler currently no-op
+- delivery events: subscribed, handler currently no-op
 
 Published:
 - none directly implemented in this service

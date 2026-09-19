@@ -2,7 +2,7 @@
 
 ## Why Kafka is used here
 
-This project uses Kafka as an asynchronous integration backbone between services. The purpose is to decouple status changes and downstream reactions from synchronous HTTP calls.
+This project uses Kafka as an asynchronous integration backbone between services. The purpose is to decouple status changes and downstream reactions from synchronous HTTP calls, but the current implementation is partial and remains at-least-once with process-local safeguards.
 
 The core event topics are declared in:
 
@@ -60,7 +60,7 @@ Delivery semantics (payment-service):
 
 ### delivery.events
 
-This topic captures delivery lifecycle changes:
+This topic is intended to capture delivery lifecycle changes:
 
 - assignment to driver
 - pickup started
@@ -68,7 +68,7 @@ This topic captures delivery lifecycle changes:
 - delivery completed
 - cancellation or failure
 
-This is primarily relevant to delivery, tracking, and notification flows.
+This is primarily relevant to delivery, tracking, and notification flows. The delivery service currently defines the event publisher and event-building code, but its lifecycle methods do not invoke publication consistently; treat delivery event propagation as partial.
 
 ## Event-driven patterns in the repository
 
@@ -93,7 +93,7 @@ The repository does not implement a centralized event store. Instead, each servi
 
 Services react to incoming events by updating their own internal state or creating follow-up side effects:
 
-- `notification-service` listens to order/payment/delivery topics and records inbox items
+- `notification-service` subscribes to order/payment/delivery topics and persists order notifications; payment and delivery handlers currently contain no-op behavior because the required lookup/contract work is not implemented
 - `driver-service` can react to delivery events when the lifecycle affects driver availability
 - `order-service` can adjust its internal state based on payment or delivery outcomes
 
@@ -118,6 +118,14 @@ Most of the actual event contracts are established implicitly through:
 - message content created by each producer
 
 This means the project is best understood as a practical microservice event bus rather than a strict event-sourcing system.
+
+### Reliability boundaries
+
+- Consumer retries are limited to three attempts with exponential backoff in the process.
+- Processed event IDs are stored in an in-memory `Set`; the state is lost on restart and is not shared across replicas.
+- Exhausted messages are logged and their offsets are committed; no real dead-letter topic or persistence path is implemented.
+- Payment events use deterministic event IDs and retry-aware payment markers, but publication remains at-least-once.
+- A versioned event registry, runtime validation, durable deduplication, and DLQ handling remain roadmap work.
 
 ## Source of truth
 

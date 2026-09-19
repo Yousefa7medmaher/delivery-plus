@@ -49,7 +49,7 @@ These verify:
 
 ### 3. Integration tests
 
-The project’s architecture benefits from focused integration checks around:
+The project’s architecture would benefit from focused integration checks around:
 
 - PostgreSQL-backed domain flows
 - Redis cart state handling
@@ -77,12 +77,12 @@ The stack is designed to run via Docker Compose, and this is a key validation pa
 
 - [docker-compose.yml](../docker-compose.yml)
 
-A realistic verification flow includes:
+A realistic verification flow would include:
 
 - compose build
 - compose up
 - service health checks
-- gateway health verification
+- gateway route verification (the gateway `/health` route is currently missing)
 - Kafka + Postgres readiness
 
 This is particularly useful for validating that the project boots correctly in a real multi-container setup.
@@ -98,7 +98,7 @@ When working on this repo, the best practical testing order is:
 
 ## Important caveat
 
-The repository is not a full end-to-end test platform by default. Most meaningful validation will require a combination of:
+The repository is not a full end-to-end test platform by default. Current CI runs workspace lint, tests, builds, Compose syntax validation, an API Gateway image build, and Trivy scans. It does not start the full infrastructure, run migrations, run `scripts/e2e.ts`, collect coverage, or enforce a coverage threshold. Most broader validation therefore requires a combination of:
 
 - workspace-level scripts
 - service-level Jest runs

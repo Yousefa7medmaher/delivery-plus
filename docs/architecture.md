@@ -1,6 +1,6 @@
 # Architecture
 
-The platform is a NestJS/TypeScript monorepo with one API Gateway and eleven domain services. Each service owns its application code and durable data. The `shared` workspace contains cross-cutting infrastructure, not business workflows.
+The platform is a NestJS 10 / TypeScript monorepo with one API Gateway and eleven domain services. Nine domain services own PostgreSQL databases; cart and tracking use Redis; the gateway owns no persistence. The `shared` workspace contains cross-cutting infrastructure, not business workflows.
 
 ```mermaid
 graph TD
@@ -10,7 +10,7 @@ graph TD
   Services --> Redis[(Redis)]
   Order[Order service] -->|order.events| Kafka[(Kafka)]
   Payment[Payment service] -->|payment.events| Kafka
-  Delivery[Delivery service] -->|delivery.events| Kafka
+  Delivery[Delivery service] -. delivery.events wiring .-> Kafka
   Kafka --> Driver[Driver service]
   Kafka --> Notification[Notification service]
   Kafka --> Order
@@ -19,7 +19,7 @@ graph TD
 ## Communication
 
 - HTTP is used by the gateway and for synchronous service-to-service checks such as menu ownership, cart reads, order validation, and delivery updates.
-- Kafka carries order, payment, and delivery events. Consumers must tolerate retries and duplicate delivery.
+- Kafka carries order, payment, and delivery event topics. Order and payment publication is implemented; delivery has event-building and Kafka wiring code, but its lifecycle methods currently do not invoke publication. Consumers retry locally up to three times, use an in-memory event-id set, and commit exhausted messages instead of writing to a real DLQ.
 - Redis stores carts, cache entries, rate-limit state, and recent driver locations with a TTL.
 - PostgreSQL stores credentials, profiles, restaurants, menu data, orders, payments, deliveries, drivers, and notifications. Docker initializes separate logical databases from `docker/postgres/init.sql`.
 
@@ -30,6 +30,6 @@ graph TD
 3. Payment Service creates and processes a simulated payment, then publishes success or failure. Order Service consumes the result and changes order state.
 4. A restaurant owner advances the order to preparation and pickup readiness. Delivery Service creates a delivery, assigns an available driver, and updates the order through HTTP clients.
 5. Drivers report locations to Tracking Service, which stores the latest location in Redis. Tracking combines delivery data with the driver location.
-6. Delivery completion updates delivery, order, and driver state. Kafka consumers and direct HTTP calls are both present in the current implementation.
+6. Delivery completion updates delivery, order, and driver state through the implemented service calls. Delivery event publication is currently partial, so downstream event propagation should not be assumed for every lifecycle transition.
 
 The current implementation does not provide a real payment provider, push/email delivery, durable Kafka idempotency store, or production dead-letter queue. Those are roadmap items.

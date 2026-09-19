@@ -47,7 +47,7 @@ Purpose:
 
 ## Service startup model
 
-The stack is built with health checks and `depends_on` conditions. This is important because it avoids starting dependent services before their backing infrastructure is actually ready.
+The stack is built with health checks and `depends_on` conditions. This expresses the intended startup order, but it is not a complete readiness guarantee: Redis and Kafka readiness are not generally checked by application health endpoints, and the gateway Compose healthcheck targets a route the gateway does not currently implement.
 
 Examples from the compose file:
 
@@ -67,11 +67,11 @@ The important behavior is:
 
 ## Health checks
 
-Each app service exposes a `/health` route and uses a Docker healthcheck like:
+Each domain app service exposes a `/health` route and uses a Docker healthcheck like:
 
 - `wget --spider -q http://localhost:<port>/health`
 
-This makes startup order deterministic and makes the stack easier to reason about when debugging issues.
+The API Gateway is an exception: it has no health controller while Compose still probes `/health` on port 3000. This mismatch can keep the gateway unhealthy even when its process is running.
 
 ## Environment conventions
 
@@ -105,7 +105,7 @@ The service applications are intentionally configured with `synchronize: false` 
 
 In Docker-based startup, each built service image runs the migration step before the application process starts. This is the repository’s deployment-safe path for fresh databases and local development, and it prevents untracked schema creation from runtime sync.
 
-The repository was validated in WSL against the real Compose stack: `docker compose config --quiet` succeeded, the Postgres/Redis/Kafka/Zookeeper services became healthy, and each logical service database was reset and migrated successfully using the project’s migration commands.
+The repository provides WSL and Compose validation commands, but this context does not claim a successful full-stack run unless a current run has been recorded. Use `docker compose config --quiet`, `docker compose ps`, and targeted logs as the runtime evidence.
 
 ## Operational caveats
 
