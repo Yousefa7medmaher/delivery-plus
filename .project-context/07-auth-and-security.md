@@ -69,6 +69,23 @@ Several service entities attach ownership to user identifiers:
 
 This means the platform often relies on consistent user identifiers while still keeping business ownership state local to the service that owns the domain data.
 
+## Current auth backlog and planned hardening
+
+The current auth implementation is intentionally minimal and is tracked as a managed backlog in the issue registry. The current documented gaps are:
+
+- refresh-token lifecycle and rotation
+- logout and token revocation
+- password change and reset flows
+- verification workflows for email and account state
+- failed-login tracking and lockout behavior
+- MFA / 2FA enhancement after the base security model is in place
+
+These gaps are tracked in the issue docs under [../issues](../issues), especially:
+
+- [../issues/024-auth-refresh-token-lifecycle.md](../issues/024-auth-refresh-token-lifecycle.md)
+- [../issues/025-auth-password-change-and-recovery.md](../issues/025-auth-password-change-and-recovery.md)
+- [../issues/026-auth-account-verification-and-lockout.md](../issues/026-auth-account-verification-and-lockout.md)
+
 ## Security assumptions and caveats
 
 This project is structured for a backend learning/demo environment, not a production-grade identity platform. The current design assumptions include:

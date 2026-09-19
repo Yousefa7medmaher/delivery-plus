@@ -35,6 +35,8 @@ Suggested sequence:
 
 This folder stays broad and high-level. Detailed service-level contract docs live in [../docs/services.md](../docs/services.md) and the per-service pages under [../docs/services](../docs/services).
 
+This repo also maintains a concrete implementation backlog in [../issues/README.md](../issues/README.md) and the prompt-driven issue drafts under [../issues](../issues). The issue directory is the managed task registry for service-level feature work, while this folder remains the architecture source of truth.
+
 ## Scope
 
 This folder is descriptive only. It is not a coding standard, a task runner, or a behavior policy document.
