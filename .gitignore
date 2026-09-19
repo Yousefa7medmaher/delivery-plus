@@ -16,3 +16,8 @@ yarn-debug.log*
 yarn-error.log*
 script.sh
 docker-compose.override.yml
+
+# Local roadmap / tooling
+issues/
+prompts/
+scripts/manage-issues.sh
