@@ -85,4 +85,5 @@ jobs:
           POSTGRES_USER_URLENCODED: compose_validation_user
           POSTGRES_PASSWORD_URLENCODED: compose_validation_only_7f3c2b
           JWT_SECRET: compose_validation_only_jwt_9a41d8
+          INTERNAL_AUTH_SECRET: compose_validation_only_internal_5e2a91
         run: docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config --quiet
