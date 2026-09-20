@@ -30,4 +30,4 @@ From `services/user-service/src/config/app-config.ts`:
 - `NODE_ENV` (default: `development`)
 
 ## Notes
-The service acts as the canonical user-data layer for profile details and exposes a few internal endpoints that are intended for service-to-service use.
+The service acts as the canonical user-data layer for profile details and exposes a few internal endpoints that are intended for service-to-service use. `POST /internal/users` currently lacks service authentication. It should accept only requests satisfying the HMAC internal-auth contract in [ADR 001](../adr/001-internal-service-authentication.md); endpoint enforcement is DP-010, while profile ownership enforcement is DP-057.
