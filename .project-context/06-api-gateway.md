@@ -72,7 +72,7 @@ The gateway acts as the boundary where client requests are routed, but the actua
 - token is passed on subsequent requests
 - downstream services validate those tokens and roles as needed
 
-The gateway should not be treated as the only enforcement layer; actual permission logic still happens in application services. Internal service authentication is defined by [ADR 001](../docs/adr/001-internal-service-authentication.md), but is not implemented yet. The internal user-profile creation route is currently unauthenticated and should not be exposed through the public gateway.
+The gateway should not be treated as the only enforcement layer; actual permission logic still happens in application services. Internal service authentication is defined by and implemented according to [ADR 001](../docs/adr/001-internal-service-authentication.md). The gateway explicitly returns `404` for `/api/users/internal/*`, so the internal profile-creation route is not publicly proxied.
 
 ## Current architecture assumptions
 

@@ -7,6 +7,9 @@ export interface AppConfig {
   databaseUrl: string;
   jwtSecret: string;
   orderServiceUrl: string;
+  redisUrl: string;
+  internalAuthSecret: string;
+  internalAuthAllowedService: string;
 }
 
 export function loadConfig(): AppConfig {
@@ -23,5 +26,16 @@ export function loadConfig(): AppConfig {
     databaseUrl: process.env.DATABASE_URL as string,
     jwtSecret: process.env.JWT_SECRET as string,
     orderServiceUrl: process.env.ORDER_SERVICE_URL || 'http://localhost:3006',
+    redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+    internalAuthSecret: requireInternalAuthSecret(),
+    internalAuthAllowedService: process.env.INTERNAL_AUTH_ALLOWED_SERVICE || 'auth-service',
   };
+}
+
+function requireInternalAuthSecret(): string {
+  const secret = process.env.INTERNAL_AUTH_SECRET;
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error('Missing required environment variables: INTERNAL_AUTH_SECRET');
+  }
+  return secret || 'local-internal-auth-development-only';
 }

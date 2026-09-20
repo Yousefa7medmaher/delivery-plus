@@ -15,7 +15,8 @@ and are not considered vulnerabilities:
 
 - default JWT secrets and Postgres credentials in `docker-compose.yml` and `.env.example`
 - internal service-to-service HTTP calls that are not independently rate-limited
-  (they are reachable only on the internal Docker network, not from outside the gateway)
+  (they are reachable only on the internal Docker network, not from outside the gateway;
+  protected internal routes still require the HMAC service-auth contract)
 
 Please do report:
 

@@ -74,6 +74,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER_URLENCODED:?POSTGRES_USER_URLENCODED must be set}:${POSTGRES_PASSWORD_URLENCODED:?POSTGRES_PASSWORD_URLENCODED must be set}@postgres:5432/auth_service
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      INTERNAL_AUTH_SECRET: ${INTERNAL_AUTH_SECRET:?INTERNAL_AUTH_SECRET must be set}
       USER_SERVICE_URL: http://user-service:3002
     healthcheck:
       test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3001/health']
@@ -94,6 +95,8 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgres://${POSTGRES_USER_URLENCODED:?POSTGRES_USER_URLENCODED must be set}:${POSTGRES_PASSWORD_URLENCODED:?POSTGRES_PASSWORD_URLENCODED must be set}@postgres:5432/user_service
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      REDIS_URL: redis://redis:6379
+      INTERNAL_AUTH_SECRET: ${INTERNAL_AUTH_SECRET:?INTERNAL_AUTH_SECRET must be set}
       ORDER_SERVICE_URL: http://order-service:3006
     healthcheck:
       test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3002/health']
@@ -102,6 +105,8 @@ services:
       retries: 10
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   restaurant-service:

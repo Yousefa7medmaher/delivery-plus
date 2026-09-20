@@ -1,4 +1,6 @@
 import { Inject, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { INTERNAL_AUTH_HEADERS, signInternalRequest } from '@food-delivery/shared';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 
 export interface CreateProfilePayload {
@@ -22,11 +24,27 @@ export class UserServiceClient {
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {}
 
   async createProfile(payload: CreateProfilePayload, correlationId: string): Promise<void> {
+    const path = '/internal/users';
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const nonce = randomUUID();
+    const signature = signInternalRequest({
+      method: 'POST',
+      path,
+      timestamp,
+      nonce,
+      body: payload,
+      service: this.config.internalAuthService,
+      secret: this.config.internalAuthSecret,
+    });
     const response = await fetch(`${this.config.userServiceUrl}/internal/users`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-correlation-id': correlationId,
+        [INTERNAL_AUTH_HEADERS.service]: this.config.internalAuthService,
+        [INTERNAL_AUTH_HEADERS.timestamp]: timestamp,
+        [INTERNAL_AUTH_HEADERS.nonce]: nonce,
+        [INTERNAL_AUTH_HEADERS.signature]: signature,
       },
       body: JSON.stringify(payload),
     });

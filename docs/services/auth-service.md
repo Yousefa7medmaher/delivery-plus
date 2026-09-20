@@ -11,7 +11,7 @@ From `services/auth-service/src/controllers/auth.controller.ts`:
 - `GET /auth/me` – return the current user payload from the bearer token
 
 ## Dependencies
-- Calls `user-service` internally for user profile creation and lookup via `src/common/user-service.client.ts`
+- Calls `user-service` internally for user profile creation via `src/common/user-service.client.ts`, signing the request with the internal HMAC contract
 - Requires `DATABASE_URL` and `JWT_SECRET`
 - Uses Redis indirectly through shared rate-limit infrastructure and shared app config
 
@@ -27,6 +27,7 @@ From `services/auth-service/src/config/app-config.ts` and `docker-compose.yml`:
 - `USER_SERVICE_URL` (default: `http://localhost:3002`)
 - `PORT` (default: `3001`)
 - `NODE_ENV` (default: `development`)
+- `INTERNAL_AUTH_SECRET` (required in production; local Compose provides a development-only default)
 
 ## Notes
-The auth service validates credentials and issues JSON Web Tokens; downstream access control is enforced with shared guards from `@food-delivery/shared`. Its profile-creation call is currently an unauthenticated internal HTTP request. The accepted target for that call is the HMAC service-auth contract in [ADR 001](../adr/001-internal-service-authentication.md), to be applied through DP-010.
+The auth service validates credentials and issues JSON Web Tokens; downstream access control is enforced with shared guards from `@food-delivery/shared`. Its profile-creation call uses HMAC service authentication with a service identity, timestamp, nonce, and body-bound signature. A shared `INTERNAL_AUTH_SECRET` must be rotated through deployment configuration, not source code.

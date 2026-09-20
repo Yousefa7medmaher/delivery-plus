@@ -5,6 +5,7 @@ import { UsersService } from '../services/users.service';
 import { CreateProfileDto } from '../dto/create-profile.dto';
 import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { UserProfile } from '../entities/user-profile.entity';
+import { InternalAuthGuard } from '../guards/internal-auth.guard';
 
 @ApiTags('users')
 @Controller()
@@ -12,6 +13,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post('internal/users')
+  @UseGuards(InternalAuthGuard)
   @ApiOperation({
     summary: 'Internal: create a profile (called synchronously by auth-service on registration)',
   })
