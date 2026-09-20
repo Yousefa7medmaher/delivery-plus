@@ -1,3 +1,4 @@
 export function isBlockedInternalRoute(path: string): boolean {
-  return path === '/api/users/internal' || path.startsWith('/api/users/internal/');
+  const normalizedPath = path.toLowerCase();
+  return normalizedPath === '/api/users/internal' || normalizedPath.startsWith('/api/users/internal/');
 }

@@ -26,12 +26,13 @@ describe('InternalAuthGuard', () => {
       method: 'POST',
       path: '/internal/users',
       body: { userId: 'user-1', email: 'user@example.com' },
+      ...overrides,
       headers: {
         'x-internal-service': 'auth-service',
         'x-internal-timestamp': Math.floor(Date.now() / 1000).toString(),
         'x-internal-nonce': 'nonce-1',
+        ...(overrides.headers ?? {}),
       },
-      ...overrides,
     };
     request.headers['x-internal-signature'] = signInternalRequest({
       method: request.method,
