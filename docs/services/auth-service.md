@@ -29,4 +29,4 @@ From `services/auth-service/src/config/app-config.ts` and `docker-compose.yml`:
 - `NODE_ENV` (default: `development`)
 
 ## Notes
-The auth service validates credentials and issues JSON Web Tokens; downstream access control is enforced with shared guards from `@food-delivery/shared`.
+The auth service validates credentials and issues JSON Web Tokens; downstream access control is enforced with shared guards from `@food-delivery/shared`. Its profile-creation call is currently an unauthenticated internal HTTP request. The accepted target for that call is the HMAC service-auth contract in [ADR 001](../adr/001-internal-service-authentication.md), to be applied through DP-010.

@@ -104,6 +104,8 @@ This project is structured for a backend learning/demo environment, not a produc
 - `GET /users/:id` validates a JWT but does not enforce self-access or admin ownership rules
 - service-to-service authentication has no standardized implementation yet
 
+The accepted target design is documented in [ADR 001](../docs/adr/001-internal-service-authentication.md): HMAC-signed internal requests with an explicit service identity, timestamp, nonce, and body-bound signature. This is a design contract for DP-058; guards, secrets, nonce storage, and endpoint enforcement remain implementation work under DP-010 and related issues.
+
 The repo is therefore secure enough for a local development stack, but not designed as a finished production auth architecture out of the box.
 
 ## Source of truth

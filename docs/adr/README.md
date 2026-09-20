@@ -5,6 +5,7 @@ This folder stores architecture decision records for significant choices in the 
 ## Template
 
 - [ADR template](./adr-template.md)
+- [ADR 001: Internal Service Authentication](./001-internal-service-authentication.md)
 
 ## Suggested usage
 
