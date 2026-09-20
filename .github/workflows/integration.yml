@@ -1,0 +1,128 @@
+name: Integration
+
+# Boots the platform's real Docker Compose stack (Postgres, Redis, Kafka,
+# Zookeeper, and every application service) and exercises the actual
+# cross-service critical path. This is deliberately heavier than
+# pr-quality.yml, which only checks that each service builds/tests in
+# isolation and never starts real infrastructure.
+#
+# Coverage note (read before trusting a green run as "the platform works"):
+#   - This DOES verify: every service boots against real Postgres/Redis/
+#     Kafka, each PostgreSQL-backed service's TypeORM migrations apply
+#     during container startup (see the root Dockerfile's CMD), the API
+#     Gateway can route a full auth -> restaurant -> menu -> cart -> order
+#     -> payment -> delivery -> driver chain end-to-end, and the
+#     order/payment/delivery state machines enforce their real transition
+#     rules under an actual running stack.
+#   - This does NOT currently verify: tracking-service or
+#     notification-service business behavior (no script drives them yet --
+#     notification-service's payment/delivery Kafka handlers are documented
+#     no-ops in .project-context/05-event-driven-design.md, so there is
+#     nothing meaningful to assert there today), duplicate-payment-request
+#     races (that is covered separately, at the repository layer, by
+#     payments.repository.integration.spec.ts in migration-verification.yml),
+#     or driver/service restart resilience. These are reported as gaps in
+#     the PR/task summary rather than silently assumed to pass.
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.project-context/**'
+  push:
+    branches: [main, dev]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.project-context/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  COMPOSE_FILES: -f docker-compose.base.yml -f docker-compose.test.yml
+
+jobs:
+  stack:
+    name: Full stack + critical workflow
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Needed on the runner itself (not inside the containers) to execute
+      # scripts/seed.ts and scripts/e2e.ts with ts-node against the stack,
+      # the same way a developer would per README.md.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: npm run build --workspace=@food-delivery/shared
+
+      # docker-compose.test.yml is this repository's own "deterministic test
+      # layout" overlay (see docs/deployment.md); it publishes the ports the
+      # host-side seed/e2e scripts need and sets NODE_ENV=test. No secrets
+      # are required: every credential here has a compose-level default.
+      # `--wait` (Compose v2.17+) blocks until every service with a
+      # healthcheck reports healthy, or fails the step on timeout/unhealthy.
+      # Each PostgreSQL-backed service's container runs
+      # `typeorm migration:run` before starting its Nest app (root
+      # Dockerfile CMD), and its /health route only responds once the app
+      # has booted -- so this step is also this pipeline's verification that
+      # migrations applied successfully on a fresh database, without a
+      # separate manual step.
+      - name: Build, start, and wait for the stack to become healthy
+        run: docker compose ${{ env.COMPOSE_FILES }} up --build -d --wait --wait-timeout 300
+
+      - name: Show stack status
+        if: always()
+        run: docker compose ${{ env.COMPOSE_FILES }} ps
+
+      # Populates a restaurant (opened), a menu item, and an online driver.
+      - name: Seed baseline data
+        run: npm run seed
+        env:
+          API_URL: http://localhost:3000
+
+      # Drives the actual critical path across every service boundary named
+      # in the task: auth -> restaurant/menu -> cart -> order -> payment ->
+      # delivery -> driver, asserting real state-machine transitions
+      # (including the CONFIRMED -> PREPARING -> READY_FOR_PICKUP order
+      # transition and the delivery driver-assignment/pickup/start/complete
+      # sequence) end-to-end through the API Gateway.
+      - name: Run critical-path workflow
+        run: npm run e2e
+        env:
+          API_URL: http://localhost:3000
+
+      - name: Collect diagnostics
+        if: always()
+        run: |
+          mkdir -p diagnostics
+          docker compose ${{ env.COMPOSE_FILES }} ps > diagnostics/compose-ps.txt || true
+          docker compose ${{ env.COMPOSE_FILES }} logs --no-color --tail=300 > diagnostics/compose-logs.txt || true
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-diagnostics
+          path: diagnostics/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Tear down the stack
+        if: always()
+        run: docker compose ${{ env.COMPOSE_FILES }} down --volumes --remove-orphans

@@ -1,0 +1,89 @@
+name: Security
+
+# Static analysis, dependency, filesystem, and secret scanning.
+#
+# Image scanning lives in docker.yml, not here: it already builds and Trivy
+# scans every service image (this pipeline previously duplicated that for
+# api-gateway only), so keeping it in one place avoids building the same
+# images twice across workflows.
+
+on:
+  pull_request:
+  push:
+    branches: [main, testing, dev]
+  schedule:
+    # Weekly CodeQL run so newly disclosed CVEs against unchanged code are
+    # still caught, independent of PR activity.
+    - cron: '17 4 * * 1'
+  workflow_dispatch: {}
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codeql:
+    name: CodeQL (JavaScript/TypeScript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'
+
+  dependency-audit:
+    name: Dependency audit (npm audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # A single root package-lock.json covers every workspace (shared +
+      # services/*), so one root `npm audit` already audits all of them --
+      # no need for a per-service matrix here.
+      - name: Install dependencies
+        run: npm ci
+
+      # --audit-level=high: fail only on high/critical advisories. Low and
+      # moderate findings are common noise in a fast-moving Node dependency
+      # tree and are not treated as a pipeline-blocking condition without a
+      # specific reason to.
+      - name: npm audit (high/critical only)
+        run: npm audit --audit-level=high
+
+  filesystem-scan:
+    name: Filesystem + secret scan (Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan (vulnerabilities + secrets)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: 1

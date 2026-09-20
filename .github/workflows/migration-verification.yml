@@ -1,0 +1,233 @@
+name: Migration Verification
+
+# Verifies the two real, distinct migration mechanisms this repository has:
+#   1. TypeORM migrations (scripts/typeorm-migration-runner.js), run per
+#      PostgreSQL-owned service, against a fresh empty database.
+#   2. The payment-service manual SQL upgrade script
+#      (services/payment-service/migrations/20260917_payment_idempotency.sql),
+#      which is a separate, already-written repository test
+#      (payments.repository.integration.spec.ts) covering the
+#      legacy-schema -> current-schema upgrade path. TypeORM does not run
+#      this file; it is applied by hand against already-deployed databases
+#      that predate the idempotency columns, per
+#      .project-context/04-database-design.md.
+#
+# Path-filtered so unrelated PRs don't pay for two fresh Postgres instances
+# and a full workspace install.
+
+on:
+  pull_request:
+    paths:
+      - '**/migrations/**'
+      - '**/*.entity.ts'
+      - '**/database/data-source.ts'
+      - '**/database/typeorm.config.ts'
+      - 'scripts/typeorm-migration-runner.js'
+      - 'docker/postgres/init.sql'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches: [main, dev]
+    paths:
+      - '**/migrations/**'
+      - '**/*.entity.ts'
+      - '**/database/data-source.ts'
+      - '**/database/typeorm.config.ts'
+      - 'scripts/typeorm-migration-runner.js'
+      - 'docker/postgres/init.sql'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migration-verification-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fresh-database:
+    name: Fresh-database TypeORM migrations (all PostgreSQL services)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: npm run build --workspace=@food-delivery/shared
+
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+
+      # Same logical-database-per-service layout the real stack uses (see
+      # docker/postgres/init.sql), against the same fallback DATABASE_URL
+      # every service's data-source.ts already defaults to
+      # (postgres://postgres:postgres@localhost:5432/<service>_service), so
+      # no per-service env vars are needed to point migration:run at it.
+      - name: Create per-service databases
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -f docker/postgres/init.sql
+
+      - name: Run TypeORM migrations for every PostgreSQL-backed service
+        run: npm run migration:run --workspaces --if-present
+
+      - name: Verify no pending migrations remain
+        run: |
+          set -euo pipefail
+          for service in auth-service user-service restaurant-service menu-service \
+                         order-service payment-service delivery-service driver-service \
+                         notification-service; do
+            echo "== $service =="
+            output=$(npm run migration:show --workspace="services/$service" --if-present 2>&1) || {
+              echo "$output"
+              echo "migration:show failed for $service"
+              exit 1
+            }
+            echo "$output"
+            last_line=$(echo "$output" | tail -n1 | tr -d '[:space:]')
+            if [ "$last_line" != "false" ]; then
+              echo "Service $service reports pending migrations after migration:run (expected 'false', got '$last_line')."
+              exit 1
+            fi
+          done
+
+      # Schema-shape checks: every table each service's migration(s) create,
+      # plus the specific indexes/constraints .project-context/04-database-design.md
+      # calls out as load-bearing for correctness (idempotency keys, active-order
+      # uniqueness, etc). This intentionally does not assert anything about
+      # DB-generated UUID defaults: none of these migrations declare one (no
+      # uuid-ossp/pgcrypto DEFAULT on any `id` column) -- primary keys are
+      # plain `uuid NOT NULL` columns, and ids are assigned application-side
+      # before insert.
+      - name: Verify expected schema objects exist
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+
+          check() {
+            local db="$1" query="$2" label="$3"
+            local count
+            count=$(psql -h localhost -U postgres -d "$db" -tAc "$query")
+            if [ "$count" -lt 1 ]; then
+              echo "MISSING: $label in database $db"
+              exit 1
+            fi
+            echo "OK: $label"
+          }
+
+          check auth_service         "select count(*) from information_schema.tables where table_name='credentials'" "table credentials"
+          check auth_service         "select count(*) from pg_indexes where indexname='UQ_credentials_email'" "index UQ_credentials_email"
+
+          check user_service         "select count(*) from information_schema.tables where table_name='user_profiles'" "table user_profiles"
+
+          check restaurant_service   "select count(*) from information_schema.tables where table_name='restaurants'" "table restaurants"
+          check restaurant_service   "select count(*) from pg_indexes where indexname='IDX_restaurants_ownerId'" "index IDX_restaurants_ownerId"
+
+          check menu_service         "select count(*) from information_schema.tables where table_name='categories'" "table categories"
+          check menu_service         "select count(*) from information_schema.tables where table_name='menu_items'" "table menu_items"
+          check menu_service         "select count(*) from pg_indexes where indexname='IDX_menu_items_restaurantId'" "index IDX_menu_items_restaurantId"
+
+          check order_service        "select count(*) from information_schema.tables where table_name='orders'" "table orders"
+          check order_service        "select count(*) from information_schema.tables where table_name='order_items'" "table order_items"
+          check order_service        "select count(*) from pg_indexes where indexname='UQ_orders_customer_idempotency_key'" "index UQ_orders_customer_idempotency_key"
+
+          check payment_service      "select count(*) from information_schema.tables where table_name='payments'" "table payments"
+          check payment_service      "select count(*) from pg_indexes where indexname='UQ_payments_active_order'" "index UQ_payments_active_order"
+          check payment_service      "select count(*) from pg_indexes where indexname='UQ_payments_customer_idempotency_key'" "index UQ_payments_customer_idempotency_key"
+
+          check delivery_service     "select count(*) from information_schema.tables where table_name='deliveries'" "table deliveries"
+          check delivery_service     "select count(*) from pg_indexes where indexname='UQ_deliveries_orderId'" "index UQ_deliveries_orderId"
+
+          check driver_service       "select count(*) from information_schema.tables where table_name='drivers'" "table drivers"
+          check driver_service       "select count(*) from pg_indexes where indexname='UQ_drivers_userId'" "index UQ_drivers_userId"
+
+          check notification_service "select count(*) from information_schema.tables where table_name='notifications'" "table notifications"
+
+      - name: Collect diagnostics
+        if: failure()
+        env:
+          PGPASSWORD: postgres
+        run: |
+          mkdir -p diagnostics
+          for db in auth_service user_service restaurant_service menu_service order_service \
+                    payment_service delivery_service driver_service notification_service; do
+            psql -h localhost -U postgres -d "$db" -c '\dt' >> diagnostics/schema-dump.txt 2>&1 || true
+            psql -h localhost -U postgres -d "$db" -c '\di' >> diagnostics/schema-dump.txt 2>&1 || true
+          done
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-fresh-db-diagnostics
+          path: diagnostics/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  payment-upgrade-scenario:
+    name: Payment idempotency SQL upgrade (legacy schema -> current)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: payment_service_upgrade_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: npm run build --workspace=@food-delivery/shared
+
+      # This is a real, already-written test in the repository, not something
+      # invented for this pipeline: it creates the pre-upgrade schema by
+      # hand, applies services/payment-service/migrations/20260917_payment_idempotency.sql
+      # (twice, to check idempotency), and asserts the result matches what
+      # the current TypeORM entity/migration expects. It only runs when this
+      # env var is set, which is exactly the "opt in to a real Postgres" hook
+      # payments.repository.integration.spec.ts already defines.
+      - name: Run payment-service Postgres migration/idempotency test
+        run: npm test --workspace=services/payment-service
+        env:
+          PAYMENT_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/payment_service_upgrade_test

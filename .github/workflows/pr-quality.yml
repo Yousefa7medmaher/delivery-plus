@@ -1,0 +1,88 @@
+name: PR Quality Gate
+
+# Fast baseline gate: does this PR compile, pass its normal tests, and
+# preserve basic runtime configuration? This workflow intentionally does
+# NOT start Postgres/Redis/Kafka or build application Docker images —
+# that is the job of integration.yml, migration-verification.yml, and
+# docker.yml.
+
+on:
+  pull_request:
+  push:
+    branches: [main, testing, dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, build, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Single lockfile at the repo root covers every workspace (shared + services/*).
+      - name: Install dependencies
+        run: npm ci
+
+      # The shared package's package.json points "main" at dist/index.js, so every
+      # other workspace's `tsc` build resolves @food-delivery/shared through its
+      # compiled output. Jest itself maps @food-delivery/shared straight to
+      # shared/src via moduleNameMapper, so this build is only required for the
+      # build step below, not for `npm test`.
+      - name: Build shared package
+        run: npm run build --workspace=@food-delivery/shared
+
+      - name: Lint workspaces
+        run: npm run lint
+
+      - name: Unit tests (workspaces)
+        run: npm test
+        env:
+          # payments.repository.integration.spec.ts self-skips (describe.skip)
+          # unless PAYMENT_TEST_DATABASE_URL is set. It is intentionally left
+          # unset here so this fast gate never needs a real Postgres instance;
+          # that Postgres-backed migration/idempotency test runs in
+          # migration-verification.yml instead.
+          PAYMENT_TEST_DATABASE_URL: ''
+
+      - name: Build all workspaces
+        run: npm run build
+
+  compose-validate:
+    name: Docker Compose configuration validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate full local stack (docker-compose.yml)
+        run: docker compose -f docker-compose.yml config --quiet
+
+      - name: Validate base + dev overlay
+        run: docker compose -f docker-compose.base.yml -f docker-compose.dev.yml config --quiet
+
+      - name: Validate base + test overlay
+        run: docker compose -f docker-compose.base.yml -f docker-compose.test.yml config --quiet
+
+      # docker-compose.prod.yml uses required (`:?`) variables with no defaults,
+      # by design, so it can only be validated with placeholder values. These
+      # are for `config` validation only and are never used to run anything.
+      - name: Validate base + prod overlay (placeholder credentials, config-only)
+        env:
+          POSTGRES_USER: compose_validation_user
+          POSTGRES_PASSWORD: compose_validation_only_7f3c2b
+          POSTGRES_USER_URLENCODED: compose_validation_user
+          POSTGRES_PASSWORD_URLENCODED: compose_validation_only_7f3c2b
+          JWT_SECRET: compose_validation_only_jwt_9a41d8
+        run: docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config --quiet

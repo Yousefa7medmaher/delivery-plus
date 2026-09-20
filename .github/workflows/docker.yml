@@ -1,0 +1,91 @@
+name: Docker Build
+
+# Builds every service's real image from the repository's single root
+# Dockerfile (the same one docker-compose.yml uses, via
+# `build: {context: ., args: {SERVICE_NAME: ...}}`) and scans each with
+# Trivy. This supersedes the old ci.yml security job's api-gateway-only
+# image build/scan -- that image build is not duplicated anywhere else in
+# this repository's workflows.
+#
+# Validation only: no image is pushed to any registry here. Publishing is a
+# later CD concern once a deployment target/registry/identity model exists.
+
+on:
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'docker-compose*.yml'
+      - 'shared/**'
+      - 'services/**'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches: [main, dev]
+    paths:
+      - 'Dockerfile'
+      - 'docker-compose*.yml'
+      - 'shared/**'
+      - 'services/**'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-scan:
+    name: Build + scan (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - auth-service
+          - user-service
+          - restaurant-service
+          - menu-service
+          - cart-service
+          - order-service
+          - payment-service
+          - delivery-service
+          - driver-service
+          - tracking-service
+          - notification-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Reuses the repository's actual Dockerfile and SERVICE_NAME build-arg
+      # convention (the same one docker-compose.yml uses for every service)
+      # rather than a parallel build definition. GHA cache is scoped per
+      # service so re-runs of this workflow are fast without sharing a cache
+      # with integration.yml's own `docker compose build`, which is a
+      # separate, smaller amount of duplication accepted for simplicity.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          build-args: |
+            SERVICE_NAME=${{ matrix.service }}
+          tags: food-delivery-${{ matrix.service }}:ci
+          push: false
+          load: true
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      - name: Scan image (Trivy)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: food-delivery-${{ matrix.service }}:ci
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
