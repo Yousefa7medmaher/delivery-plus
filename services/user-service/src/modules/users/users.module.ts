@@ -7,6 +7,7 @@ import { UsersService } from '../../services/users.service';
 import { UsersController } from '../../controllers/users.controller';
 import { OrderServiceClient } from '../../common/order-service.client';
 import { APP_CONFIG, AppConfig } from '../../config/app-config';
+import { InternalAuthGuard } from '../../guards/internal-auth.guard';
 
 @Module({
   imports: [
@@ -17,6 +18,6 @@ import { APP_CONFIG, AppConfig } from '../../config/app-config';
     }),
   ],
   controllers: [UsersController],
-  providers: [UsersService, ProfilesRepository, OrderServiceClient],
+  providers: [UsersService, ProfilesRepository, OrderServiceClient, InternalAuthGuard],
 })
 export class UsersModule {}

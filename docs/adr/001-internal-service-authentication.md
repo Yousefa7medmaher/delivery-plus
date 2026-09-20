@@ -13,7 +13,7 @@ The repository runs services in Docker Compose and does not currently depend on 
 
 Internal HTTP requests that cross a service ownership boundary will use a dedicated HMAC request-signing contract. This is separate from user JWT authentication.
 
-The future implementation contract is:
+The implementation contract is:
 
 - Each calling service has a stable service identifier, such as `auth-service`.
 - Each caller and receiver share a dedicated secret configured through environment variables. Secrets are never accepted from user input or stored in request bodies.
@@ -39,7 +39,7 @@ The first application target is `auth-service` -> `user-service` for `POST /inte
 - Secrets must be provisioned and rotated per service relationship.
 - A replay store is required for nonce enforcement; Redis is the current repository-compatible candidate, but the implementation must define TTL and failure behavior before rollout.
 - Signing and verification must be shared carefully to avoid differences in path normalization, body serialization, or clock handling.
-- This ADR defines the contract; it does not itself add guards, secrets, or endpoint behavior.
+- The first implementation protects `POST /internal/users`; broader endpoint classification and additional callers are follow-up work.
 
 ## Alternatives considered
 

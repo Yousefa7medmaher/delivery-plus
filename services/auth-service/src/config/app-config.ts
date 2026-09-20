@@ -8,6 +8,8 @@ export interface AppConfig {
   jwtSecret: string;
   jwtExpiresIn: string;
   userServiceUrl: string;
+  internalAuthService: string;
+  internalAuthSecret: string;
 }
 
 export function loadConfig(): AppConfig {
@@ -25,5 +27,15 @@ export function loadConfig(): AppConfig {
     jwtSecret: process.env.JWT_SECRET as string,
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h',
     userServiceUrl: process.env.USER_SERVICE_URL || 'http://localhost:3002',
+    internalAuthService: process.env.INTERNAL_AUTH_SERVICE || 'auth-service',
+    internalAuthSecret: requireInternalAuthSecret(),
   };
+}
+
+function requireInternalAuthSecret(): string {
+  const secret = process.env.INTERNAL_AUTH_SECRET;
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error('Missing required environment variables: INTERNAL_AUTH_SECRET');
+  }
+  return secret || 'local-internal-auth-development-only';
 }

@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { NextFunction, Request, Response } from 'express';
+import { isBlockedInternalRoute } from './route-policy';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -21,6 +23,14 @@ async function bootstrap() {
     '/api/tracking': process.env.TRACKING_SERVICE_URL || 'http://localhost:3010',
     '/api/notifications': process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3011',
   };
+
+  app.use((request: Request, response: Response, next: NextFunction) => {
+    if (isBlockedInternalRoute(request.path)) {
+      response.status(404).json({ statusCode: 404, message: 'Not Found' });
+      return;
+    }
+    next();
+  });
 
   // Setup Swagger Aggregator
   const swaggerOptions = {
