@@ -12,6 +12,11 @@ This repository provides a full local Compose file at [docker-compose.yml](../do
 # start the committed full local stack
 docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up -d --build
 
+# after the stack is healthy, bootstrap through the public API and validate it
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml ps
+npm run seed
+npm run e2e
+
 # start the full stack
 docker compose up -d --build
 
@@ -68,12 +73,25 @@ The Postgres container creates the logical service databases through [docker/pos
 
 Application tables are created by TypeORM migrations. Do not rely on runtime schema sync. The repository intentionally keeps `synchronize: false` and `migrationsRun: false` for the service TypeORM configuration.
 
+Generated UUID primary keys use PostgreSQL `gen_random_uuid()` from the `pgcrypto` extension. The `001-initial-schema` migrations define this default for fresh databases. The `002-uuid-primary-key-defaults` migrations apply the same default with `ALTER TABLE` for databases where `001` was already applied before the UUID fix. Do not manually assign IDs in API clients or seed scripts.
+
+The generated-ID tables are `credentials`, `restaurants`, `categories`, `menu_items`, `orders`, `order_items`, `payments`, `deliveries`, `drivers`, and `notifications`. `user_profiles.id` is intentionally excluded: it is a `@PrimaryColumn` whose value comes from auth-service.
+
+Verify a repaired database with:
+
+```bash
+docker compose exec postgres psql -U postgres -d restaurant_service \
+	-c "SELECT column_name, column_default, is_nullable, data_type FROM information_schema.columns WHERE table_name = 'restaurants' AND column_name = 'id';"
+```
+
+The expected `column_default` is `gen_random_uuid()`.
+
 ### Production migration execution
 
 The Docker image startup path runs the service migration before the Node process starts. This means the production-safe flow is:
 
 1. build the image
-2. start the Postgres container
+2. start the Postgres containe
 3. let the app container execute its migration
 4. start the service only after migration success
 
@@ -86,6 +104,16 @@ This is the intended Docker image startup path and avoids `synchronize: true` cr
 - new schema changes must be created as new migration files
 - rollback is limited to recovery and local cleanup; it is not the normal deployment path
 - schema recovery should be performed with a new migration or a controlled maintenance window, not by re-running `synchronize`
+
+For a disposable local environment, recreate volumes to test the initial schemas from zero:
+
+```bash
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml down -v
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml build --no-cache
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up -d
+```
+
+For an existing local database, keep the volume and rebuild/recreate the affected PostgreSQL-backed service so its `002-uuid-primary-key-defaults` migration runs.
 
 ## CI Expectations
 

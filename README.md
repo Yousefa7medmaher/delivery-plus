@@ -137,8 +137,11 @@ cd delivery-plus
 npm install
 
 # local dev stack: shared infra + application services
-# use the default dev workflow for day-to-day development
-docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up --build
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up -d --build
+
+# bootstrap sample data through the API Gateway and run the critical path
+npm run seed
+npm run e2e
 ```
 
 For environment-specific validation:
@@ -171,7 +174,7 @@ docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config --qu
 
 Each HTTP service exposes Swagger UI at `http://localhost:<service-port>/docs`, and the API Gateway aggregates the service docs at `http://localhost:3000/docs`.
 
-The API Gateway will be available at `http://localhost:3000`; see [`docs/deployment.md`](./docs/deployment.md) for the Compose variants, ports, and environment configuration. The repository contains `scripts/seed.ts` and `scripts/e2e.ts`, but the root `package.json` does not currently expose `npm run seed` or `npm run e2e` scripts.
+The API Gateway will be available at `http://localhost:3000`; see [`docs/deployment.md`](./docs/deployment.md) for the Compose variants, ports, and environment configuration. `npm run seed` bootstraps the sample environment through the API Gateway only. It is safe to rerun: existing accounts and catalog records are reused, while each run creates a new order/payment/delivery scenario. `npm run e2e` assumes the seed has completed successfully.
 
 ## <img src="./assets/icons/testing.png" width="26" valign="middle"> Testing
 
@@ -181,6 +184,10 @@ npm run test --workspace=services/order-service
 
 # complete repository validation used by CI
 npm run verify
+
+# API-level local bootstrap and critical-path validation
+npm run seed
+npm run e2e
 ```
 
 `npm run verify` runs workspace lint, tests, and builds. CI also validates Compose syntax, builds the API Gateway image, and runs Trivy filesystem and image scans. It does not start the full stack or run the E2E script.

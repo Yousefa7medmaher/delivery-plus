@@ -29,6 +29,30 @@ Compose probes `/health` on the API Gateway at port `3000`, but the gateway curr
 
 The domain services expose `/health` routes. Their readiness controllers may query PostgreSQL, but application readiness does not generally verify Kafka or Redis availability.
 
+## Bootstrap and UUID-default failures
+
+Run the API seed only after the gateway and dependent services are healthy:
+
+```bash
+npm run seed
+npm run e2e
+```
+
+The seed is API-only and must not connect directly to PostgreSQL. It creates or reuses the owner, customer, driver, restaurant, category, and menu item, then drives a cart, order, payment, delivery, and tracking scenario. A rerun logs into existing accounts and creates a new transactional scenario.
+
+If seed fails with `null value in column "id"`, inspect the live default instead of adding a manual ID to the seed:
+
+```bash
+docker compose exec postgres psql -U postgres -d restaurant_service \
+	-c "SELECT column_name, column_default, is_nullable, data_type FROM information_schema.columns WHERE table_name = 'restaurants' AND column_name = 'id';"
+```
+
+The result must show `gen_random_uuid()` as `column_default`. If the database already existed before the UUID fix, rebuild/recreate the affected service so migration `002-uuid-primary-key-defaults` runs. If testing from zero, use `docker compose down -v` before rebuilding; this removes all local data.
+
+If seed receives `429 TooManyRequests` during repeated setup, wait for the auth rate-limit window to expire. The seed logs in before attempting registration for known accounts and does not weaken the authentication limiter.
+
+If E2E reports no restaurants or menu items, seed did not complete. Fix the first seed error and rerun `npm run seed` before running E2E.
+
 ## Database and migrations
 
 PostgreSQL creates the service databases from `docker/postgres/init.sql` on first initialization. PostgreSQL-backed application containers run TypeORM migrations during image startup; cart, tracking, and the gateway skip the TypeORM migration path because they do not own relational schemas.

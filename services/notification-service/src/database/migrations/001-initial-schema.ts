@@ -6,6 +6,10 @@ export class InitialSchema1700000000000 implements MigrationInterface {
   /** Executes the forward migration as a no-op query, leaving the database schema unchanged. */
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
+      CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+    `);
+
+    await queryRunner.query(`
       CREATE TYPE "notification_type" AS ENUM (
         'ORDER_CONFIRMED',
         'PAYMENT_COMPLETED',
@@ -17,7 +21,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
 
     await queryRunner.query(`
       CREATE TABLE "notifications" (
-        "id" uuid NOT NULL,
+        "id" uuid NOT NULL DEFAULT gen_random_uuid(),
         "userId" uuid NOT NULL,
         "type" "notification_type" NOT NULL,
         "title" character varying NOT NULL,

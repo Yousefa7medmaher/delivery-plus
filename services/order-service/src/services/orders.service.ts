@@ -191,6 +191,10 @@ export class OrdersService implements OnModuleInit {
   ): Promise<Order> {
     const order = await this.findOrThrow(id);
 
+    if (order.status === dto.status) {
+      return order;
+    }
+
     if (!isTransitionAllowed(ORDER_TRANSITIONS, order.status, dto.status)) {
       throw new InvalidStateTransitionError('Order', order.status, dto.status);
     }
