@@ -9,8 +9,8 @@ Use Node.js 20+, npm, and Docker Desktop with Compose v2. Copy `.env.example` to
 This repository provides a full local Compose file at [docker-compose.yml](../docker-compose.yml) plus committed base, development, test, and production overlays. The base file defines PostgreSQL 16, Redis 7, Zookeeper, and Kafka; the overlays add application services and environment-specific ports/configuration. `docker-compose.override.yml` is ignored for local-only customization.
 
 ```bash
-# start the committed full local stack
-docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up -d --build
+# start the committed full local stack and wait for application healthchecks
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up -d --build --wait --wait-timeout 300
 
 # after the stack is healthy, bootstrap through the public API and validate it
 docker compose -f docker-compose.base.yml -f docker-compose.dev.yml ps
@@ -91,7 +91,7 @@ The expected `column_default` is `gen_random_uuid()`.
 The Docker image startup path runs the service migration before the Node process starts. This means the production-safe flow is:
 
 1. build the image
-2. start the Postgres containe
+2. start the Postgres container
 3. let the app container execute its migration
 4. start the service only after migration success
 

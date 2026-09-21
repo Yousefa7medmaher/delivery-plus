@@ -136,8 +136,9 @@ cd delivery-plus
 # install dependencies
 npm install
 
-# local dev stack: shared infra + application services
-docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up -d --build
+# local dev stack: shared infra + application services; --wait blocks until
+# Compose healthchecks pass, including services after their migrations run
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up -d --build --wait --wait-timeout 300
 
 # bootstrap sample data through the API Gateway and run the critical path
 npm run seed
