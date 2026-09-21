@@ -51,6 +51,8 @@ The result must show `gen_random_uuid()` as `column_default`. If the database al
 
 If seed receives `429 TooManyRequests` during repeated setup, wait for the auth rate-limit window to expire. The seed logs in before attempting registration for known accounts and does not weaken the authentication limiter.
 
+In CI, the integration workflow clears the test Redis database between seed and E2E. This resets rate-limit counters while preserving PostgreSQL users, restaurants, menu items, and other seeded records.
+
 If E2E reports no restaurants or menu items, seed did not complete. Fix the first seed error and rerun `npm run seed` before running E2E.
 
 ## Database and migrations

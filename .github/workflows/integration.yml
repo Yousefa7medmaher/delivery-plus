@@ -96,6 +96,13 @@ jobs:
         env:
           API_URL: http://localhost:3000
 
+      # Seed authenticates or registers the three baseline users. The auth
+      # limiter stores counters in the same Redis instance used by the test
+      # stack, so clear only test Redis state before the independent E2E run.
+      # Seeded users and catalog/order data live in PostgreSQL and are kept.
+      - name: Reset test rate-limit state
+        run: docker compose ${{ env.COMPOSE_FILES }} exec -T redis redis-cli FLUSHDB
+
       # Drives the actual critical path across every service boundary named
       # in the task: auth -> restaurant/menu -> cart -> order -> payment ->
       # delivery -> driver, asserting real state-machine transitions
