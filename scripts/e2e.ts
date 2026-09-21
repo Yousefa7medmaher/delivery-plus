@@ -77,10 +77,11 @@ async function runE2E() {
 
     // 1. Get Restaurants
     const restaurantsRes = await axios.get(`${API_URL}/api/restaurants`, customerAuth);
-    if (!restaurantsRes.data.items?.length) {
-      throw new Error('E2E setup failed: no restaurants available. Run `npm run seed` first.');
+    const restaurant = restaurantsRes.data.items?.find((item: { name?: string }) => item.name === 'Burger Palace');
+    if (!restaurant) {
+      throw new Error('E2E setup failed: seeded restaurant "Burger Palace" not found. Run `npm run seed` first.');
     }
-    const restaurantId = restaurantsRes.data.items[0].id;
+    const restaurantId = restaurant.id;
 
     // 2. Get Menu
     const menuRes = await axios.get(`${API_URL}/api/menus/restaurants/${restaurantId}/menu`, customerAuth);
