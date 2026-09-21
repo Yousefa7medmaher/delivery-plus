@@ -40,6 +40,8 @@ Consumed from:
 
 The service uses the shared Kafka abstractions (`KafkaProducerService`, `KafkaConsumerService`) from the `shared` package.
 
+Status updates are idempotent when the requested status already matches the stored status. This is required because payment creation synchronizes `PAYMENT_PENDING` directly and also publishes a Kafka event; the event consumer may legitimately observe the same transition. Duplicate delivery of the same status event therefore returns the current order instead of producing a false 409 conflict.
+
 ## Required env vars
 From `services/order-service/src/config/app-config.ts`:
 

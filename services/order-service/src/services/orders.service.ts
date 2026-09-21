@@ -191,10 +191,6 @@ export class OrdersService implements OnModuleInit {
   ): Promise<Order> {
     const order = await this.findOrThrow(id);
 
-    if (!isTransitionAllowed(ORDER_TRANSITIONS, order.status, dto.status)) {
-      throw new InvalidStateTransitionError('Order', order.status, dto.status);
-    }
-
     if (!isRoleAllowedForTransition(dto.status, requesterRole)) {
       throw new ForbiddenError(`Role ${requesterRole} cannot set order status to ${dto.status}`);
     }
@@ -205,6 +201,14 @@ export class OrdersService implements OnModuleInit {
 
     if (requesterRole === UserRole.RESTAURANT_OWNER) {
       await this.restaurantClient.assertOwnership(order.restaurantId, requesterId);
+    }
+
+    if (order.status === dto.status) {
+      return order;
+    }
+
+    if (!isTransitionAllowed(ORDER_TRANSITIONS, order.status, dto.status)) {
+      throw new InvalidStateTransitionError('Order', order.status, dto.status);
     }
 
     const updated = await this.orders.updateStatus(id, dto.status);

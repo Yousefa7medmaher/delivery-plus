@@ -9,7 +9,7 @@ The gateway routes are defined in `services/api-gateway/src/main.ts`:
 - `/api/auth` -> `auth-service` (`/auth`)
 - `/api/users` -> `user-service` (`/users`)
 - `/api/restaurants` -> `restaurant-service` (`/restaurants`)
-- `/api/menus` -> `menu-service` (`/menus` and menu item routes)
+- `/api/menus` -> `menu-service` root routes (`/categories`, `/restaurants/:restaurantId/menu`, and `/menu-items`)
 - `/api/cart` -> `cart-service` (`/cart`)
 - `/api/orders` -> `order-service` (`/orders`)
 - `/api/payments` -> `payment-service` (`/payments`)
@@ -19,6 +19,8 @@ The gateway routes are defined in `services/api-gateway/src/main.ts`:
 - `/api/notifications` -> `notification-service` (`/notifications`)
 
 The service listens on port `3000` by default and is configured via environment variables such as `AUTH_SERVICE_URL`, `USER_SERVICE_URL`, `ORDER_SERVICE_URL`, etc.
+
+The gateway restores the downstream service prefix for services whose controllers retain one. The menu controller is registered at the downstream root, so the gateway deliberately strips `/api/menus` completely. For example, `POST /api/auth/register` becomes `POST /auth/register`, while `GET /api/menus/restaurants/:id/menu` becomes `GET /restaurants/:id/menu`.
 
 ## Dependencies
 - Depends on all application services for proxying and Compose dependency checks.

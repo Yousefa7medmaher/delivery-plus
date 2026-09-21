@@ -201,6 +201,18 @@ describe('OrdersService', () => {
       ).rejects.toThrow(ForbiddenError);
     });
 
+    it('rejects a different customer before the same-status idempotent return', async () => {
+      orders.findById.mockResolvedValue(baseOrder);
+
+      await expect(
+        service.updateStatus('order-1', 'not-the-customer', UserRole.CUSTOMER, {
+          status: OrderStatus.CREATED,
+        }),
+      ).rejects.toThrow(ForbiddenError);
+
+      expect(orders.updateStatus).not.toHaveBeenCalled();
+    });
+
     it('allows ADMIN to force any valid transition', async () => {
       orders.findById.mockResolvedValue(baseOrder);
       orders.updateStatus.mockResolvedValue({ ...baseOrder, status: OrderStatus.PAYMENT_PENDING });

@@ -1,78 +1,138 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 const API_URL = process.env.API_URL || 'http://localhost:3000';
+type Auth = { headers: { Authorization: string } };
+
+async function loginOrRegister(email: string, fullName: string, role: string): Promise<Auth> {
+  try {
+    const response = await axios.post(`${API_URL}/api/auth/login`, { email, password: 'password123' });
+    return { headers: { Authorization: `Bearer ${response.data.accessToken}` } };
+  } catch (error) {
+    if (!(error instanceof AxiosError) || error.response?.status !== 401) throw error;
+    const response = await axios.post(`${API_URL}/api/auth/register`, {
+      email,
+      password: 'password123',
+      fullName,
+      role,
+    });
+    return { headers: { Authorization: `Bearer ${response.data.accessToken}` } };
+  }
+}
+
+async function waitForOrder(orderId: string, auth: Auth, status: string) {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const response = await axios.get(`${API_URL}/api/orders/${orderId}`, auth);
+    if (response.data.status === status) return response.data;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`Timed out waiting for order ${orderId} to reach ${status}`);
+}
 
 async function seed() {
   console.log('Starting seed process...');
-  
+
   try {
-    // 1. Register a restaurant owner
     console.log('Registering owner...');
-    const ownerRes = await axios.post(`${API_URL}/api/auth/register`, {
-      email: 'owner@example.com',
-      password: 'password123',
-      name: 'Restaurant Owner',
-      role: 'RESTAURANT_OWNER'
-    });
-    const ownerToken = ownerRes.data.accessToken;
-
-    // 2. Register a customer
+    const ownerAuth = await loginOrRegister('owner@example.com', 'Restaurant Owner', 'RESTAURANT_OWNER');
     console.log('Registering customer...');
-    const customerRes = await axios.post(`${API_URL}/api/auth/register`, {
-      email: 'customer@example.com',
-      password: 'password123',
-      name: 'Hungry Customer',
-      role: 'CUSTOMER'
-    });
-    const customerToken = customerRes.data.accessToken;
-
-    // 3. Register a driver
+    const customerAuth = await loginOrRegister('customer@example.com', 'Hungry Customer', 'CUSTOMER');
     console.log('Registering driver...');
-    const driverRes = await axios.post(`${API_URL}/api/auth/register`, {
-      email: 'driver@example.com',
-      password: 'password123',
-      name: 'Speedy Driver',
-      role: 'DRIVER'
-    });
-    const driverToken = driverRes.data.accessToken;
+    const driverAuth = await loginOrRegister('driver@example.com', 'Speedy Driver', 'DRIVER');
 
-    // 4. Create Restaurant
-    console.log('Creating restaurant...');
-    const restaurantRes = await axios.post(`${API_URL}/api/restaurants`, {
-      name: 'Burger Palace',
-      description: 'Best burgers in town',
-      address: '123 Main St',
-      phoneNumber: '555-0100'
-    }, { headers: { Authorization: `Bearer ${ownerToken}` } });
-    const restaurantId = restaurantRes.data.id;
+    const restaurantsResponse = await axios.get(`${API_URL}/api/restaurants`);
+    let restaurant = restaurantsResponse.data.items?.find((item: any) => item.name === 'Burger Palace');
+    if (!restaurant) {
+      console.log('Creating restaurant...');
+      restaurant = (
+        await axios.post(
+          `${API_URL}/api/restaurants`,
+          { name: 'Burger Palace', description: 'Best burgers in town', address: '123 Main St' },
+          ownerAuth,
+        )
+      ).data;
+    }
+    const restaurantId = restaurant.id;
 
-    // 5. Create Menu Category
-    console.log('Creating menu category...');
-    const categoryRes = await axios.post(`${API_URL}/api/menus/categories`, {
-      restaurantId,
-      name: 'Mains',
-      displayOrder: 1
-    }, { headers: { Authorization: `Bearer ${ownerToken}` } });
-    const categoryId = categoryRes.data.id;
+    if (restaurant.status !== 'OPEN') {
+      console.log('Opening restaurant...');
+      await axios.patch(`${API_URL}/api/restaurants/${restaurantId}/status`, { status: 'OPEN' }, ownerAuth);
+    }
 
-    // 6. Create Menu Item
-    console.log('Creating menu item...');
-    await axios.post(`${API_URL}/api/menus/items`, {
-      restaurantId,
-      categoryId,
-      name: 'Classic Burger',
-      description: 'Beef patty, lettuce, tomato, cheese',
-      price: 12.99
-    }, { headers: { Authorization: `Bearer ${ownerToken}` } });
+    let menu = (await axios.get(`${API_URL}/api/menus/restaurants/${restaurantId}/menu`)).data;
+    let category = menu.categories?.find((item: any) => item.name === 'Mains');
+    if (!category) {
+      console.log('Creating menu category...');
+      category = (
+        await axios.post(`${API_URL}/api/menus/categories`, { restaurantId, name: 'Mains', displayOrder: 1 }, ownerAuth)
+      ).data;
+      menu = (await axios.get(`${API_URL}/api/menus/restaurants/${restaurantId}/menu`)).data;
+    }
+
+    let menuItem = menu.items?.find((item: any) => item.name === 'Classic Burger');
+    if (!menuItem) {
+      console.log('Creating menu item...');
+      menuItem = (
+        await axios.post(
+          `${API_URL}/api/menus/menu-items`,
+          {
+            restaurantId,
+            categoryId: category.id,
+            name: 'Classic Burger',
+            description: 'Beef patty, lettuce, tomato, cheese',
+            price: 12.99,
+          },
+          ownerAuth,
+        )
+      ).data;
+    }
+    const menuItemId = menuItem.id;
+
+    console.log('Registering driver profile...');
+    try {
+      await axios.get(`${API_URL}/api/drivers/me`, driverAuth);
+    } catch (error) {
+      if (!(error instanceof AxiosError) || error.response?.status !== 404) throw error;
+      await axios.post(`${API_URL}/api/drivers/register`, { vehicleType: 'Sedan', licensePlate: 'ABC-1234' }, driverAuth);
+    }
+    console.log('Bringing driver online...');
+    const driverStatus = await axios.get(`${API_URL}/api/drivers/me`, driverAuth);
+    if (driverStatus.data.status !== 'AVAILABLE') {
+      await axios.post(`${API_URL}/api/drivers/me/online`, {}, driverAuth);
+    }
+
+    console.log('Seeding cart...');
+    await axios.post(`${API_URL}/api/cart/items`, { menuItemId, quantity: 1 }, customerAuth);
+    console.log('Seeding order...');
+    const order = (
+      await axios.post(`${API_URL}/api/orders`, {}, {
+        ...customerAuth,
+        headers: { ...customerAuth.headers, 'Idempotency-Key': `seed-${Date.now()}` },
+      })
+    ).data;
+    const payment = (await axios.post(`${API_URL}/api/payments`, { orderId: order.id }, customerAuth)).data;
+    await waitForOrder(order.id, customerAuth, 'PAYMENT_PENDING');
+    console.log('Processing payment...');
+    await axios.post(`${API_URL}/api/payments/${payment.id}/process`, { simulateFailure: false }, customerAuth);
+    await waitForOrder(order.id, customerAuth, 'CONFIRMED');
+    await axios.patch(`${API_URL}/api/orders/${order.id}/status`, { status: 'PREPARING' }, ownerAuth);
+    await axios.patch(`${API_URL}/api/orders/${order.id}/status`, { status: 'READY_FOR_PICKUP' }, ownerAuth);
+
+    console.log('Seeding delivery and tracking...');
+    const delivery = (await axios.post(`${API_URL}/api/deliveries`, { orderId: order.id }, ownerAuth)).data;
+    const assigned = (await axios.post(`${API_URL}/api/deliveries/${delivery.id}/assign`, {}, ownerAuth)).data;
+    await axios.post(`${API_URL}/api/tracking/location`, { latitude: 36.1627, longitude: -86.7816 }, driverAuth);
+    await axios.post(`${API_URL}/api/deliveries/${delivery.id}/pickup`, {}, driverAuth);
+    await axios.post(`${API_URL}/api/deliveries/${delivery.id}/start`, {}, driverAuth);
+    await axios.post(`${API_URL}/api/deliveries/${delivery.id}/complete`, {}, driverAuth);
+    await waitForOrder(order.id, customerAuth, 'DELIVERED');
 
     console.log('Seed completed successfully!');
+    console.log(JSON.stringify({ restaurantId, menuItemId, orderId: order.id, paymentId: payment.id, deliveryId: delivery.id, driverId: assigned.driverId }, null, 2));
   } catch (error: any) {
     console.error('Seed failed:');
-    if (error.response) {
-      console.error(error.response.data);
-    } else {
-      console.error(error.message);
-    }
+    if (error.response) console.error(error.response.status, error.response.data);
+    else console.error(error.message);
     process.exit(1);
   }
 }

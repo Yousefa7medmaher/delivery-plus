@@ -9,8 +9,13 @@ Use Node.js 20+, npm, and Docker Desktop with Compose v2. Copy `.env.example` to
 This repository provides a full local Compose file at [docker-compose.yml](../docker-compose.yml) plus committed base, development, test, and production overlays. The base file defines PostgreSQL 16, Redis 7, Zookeeper, and Kafka; the overlays add application services and environment-specific ports/configuration. `docker-compose.override.yml` is ignored for local-only customization.
 
 ```bash
-# start the committed full local stack
-docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up -d --build
+# start the committed full local stack and wait for application healthchecks
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up -d --build --wait --wait-timeout 300
+
+# after the stack is healthy, bootstrap through the public API and validate it
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml ps
+npm run seed
+npm run e2e
 
 # start the full stack
 docker compose up -d --build
@@ -68,6 +73,19 @@ The Postgres container creates the logical service databases through [docker/pos
 
 Application tables are created by TypeORM migrations. Do not rely on runtime schema sync. The repository intentionally keeps `synchronize: false` and `migrationsRun: false` for the service TypeORM configuration.
 
+Generated UUID primary keys use PostgreSQL `gen_random_uuid()` from the `pgcrypto` extension. The `001-initial-schema` migrations define this default for fresh databases. The `002-uuid-primary-key-defaults` migrations apply the same default with `ALTER TABLE` for databases where `001` was already applied before the UUID fix. Do not manually assign IDs in API clients or seed scripts.
+
+The generated-ID tables are `credentials`, `restaurants`, `categories`, `menu_items`, `orders`, `order_items`, `payments`, `deliveries`, `drivers`, and `notifications`. `user_profiles.id` is intentionally excluded: it is a `@PrimaryColumn` whose value comes from auth-service.
+
+Verify a repaired database with:
+
+```bash
+docker compose exec postgres psql -U postgres -d restaurant_service \
+	-c "SELECT column_name, column_default, is_nullable, data_type FROM information_schema.columns WHERE table_name = 'restaurants' AND column_name = 'id';"
+```
+
+The expected `column_default` is `gen_random_uuid()`.
+
 ### Production migration execution
 
 The Docker image startup path runs the service migration before the Node process starts. This means the production-safe flow is:
@@ -86,6 +104,16 @@ This is the intended Docker image startup path and avoids `synchronize: true` cr
 - new schema changes must be created as new migration files
 - rollback is limited to recovery and local cleanup; it is not the normal deployment path
 - schema recovery should be performed with a new migration or a controlled maintenance window, not by re-running `synchronize`
+
+For a disposable local environment, recreate volumes to test the initial schemas from zero:
+
+```bash
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml down -v
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml build --no-cache
+docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up -d
+```
+
+For an existing local database, keep the volume and rebuild/recreate the affected PostgreSQL-backed service so its `002-uuid-primary-key-defaults` migration runs.
 
 ## CI Expectations
 
