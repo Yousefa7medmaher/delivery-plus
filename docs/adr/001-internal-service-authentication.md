@@ -29,7 +29,7 @@ The implementation contract is:
 - User JWTs remain required for user-facing routes. A valid user JWT does not authorize an internal service route by itself.
 - Correlation IDs remain observability metadata and are not authentication credentials.
 
-The first application target is `auth-service` -> `user-service` for `POST /internal/users`. DP-010 applies this contract to that endpoint. DP-057 applies the related user ownership and access rules to profile reads.
+The first application target is `auth-service` -> `user-service` for `POST /internal/users`. DP-010 applies this contract to that endpoint. User-service also enforces profile ownership and auth/profile identity mapping on user-facing profile reads and updates.
 
 ## Consequences
 

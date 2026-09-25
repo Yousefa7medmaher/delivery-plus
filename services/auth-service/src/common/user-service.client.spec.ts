@@ -15,24 +15,26 @@ describe('UserServiceClient', () => {
       email: 'user@example.com',
       fullName: 'Test User',
     };
+    const expectedBody = {
+      userId: 'user-1',
+      authCredentialId: 'user-1',
+      email: 'user@example.com',
+      fullName: 'Test User',
+    };
 
     await client.createProfile(payload, 'correlation-1');
 
     const [, request] = fetchMock.mock.calls[0];
     const headers = request.headers as Record<string, string>;
     expect(headers['x-internal-service']).toBe('auth-service');
-    expect(
-      headers['x-internal-signature'],
-    ).toBeDefined();
-    expect(
-      headers['x-internal-signature'],
-    ).toBe(
+    expect(JSON.parse(request.body)).toEqual(expectedBody);
+    expect(headers['x-internal-signature']).toBe(
       signInternalRequest({
         method: 'POST',
         path: '/internal/users',
         timestamp: headers['x-internal-timestamp'],
         nonce: headers['x-internal-nonce'],
-        body: payload,
+        body: expectedBody,
         service: 'auth-service',
         secret: 'test-secret',
       }),

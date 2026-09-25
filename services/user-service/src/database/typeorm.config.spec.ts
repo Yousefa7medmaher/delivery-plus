@@ -3,6 +3,7 @@ import { QueryRunner } from 'typeorm';
 import { UserProfile } from '../entities/user-profile.entity';
 import defaultDataSource from './data-source';
 import { InitialSchema1700000000000 } from './migrations/001-initial-schema';
+import { ProfileOwnershipMetadata1700000000001 } from './migrations/002-profile-ownership-metadata';
 import { buildTypeOrmConfig } from './typeorm.config';
 
 const AppDataSource = defaultDataSource;
@@ -69,5 +70,19 @@ describe('InitialSchema1700000000000', () => {
     expect(query.mock.calls.length).toBeGreaterThan(1);
     expect(query.mock.calls.some(([sql]) => String(sql).includes('CREATE TABLE'))).toBe(true);
     expect(query.mock.calls.some(([sql]) => String(sql).includes('DROP TABLE IF EXISTS'))).toBe(true);
+  });
+});
+
+describe('ProfileOwnershipMetadata1700000000001', () => {
+  it('adds reversible credential mapping and ownership columns', async () => {
+    const query = jest.fn().mockResolvedValue(undefined);
+    const queryRunner = { query } as unknown as QueryRunner;
+    const migration = new ProfileOwnershipMetadata1700000000001();
+    await migration.up(queryRunner);
+    await migration.down(queryRunner);
+    expect(migration.name).toBe('ProfileOwnershipMetadata1700000000001');
+    expect(query.mock.calls.some(([sql]) => String(sql).includes('authCredentialId'))).toBe(true);
+    expect(query.mock.calls.some(([sql]) => String(sql).includes('createdByService'))).toBe(true);
+    expect(query.mock.calls.some(([sql]) => String(sql).includes('DROP COLUMN'))).toBe(true);
   });
 });

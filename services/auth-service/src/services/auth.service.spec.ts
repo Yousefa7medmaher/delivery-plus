@@ -65,7 +65,7 @@ describe('AuthService', () => {
       });
 
       expect(userServiceClient.createProfile).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 'new-user-id', email: 'b@b.com' }),
+        expect.objectContaining({ userId: 'new-user-id', email: 'b@b.com', fullName: 'B' }),
         expect.any(String),
       );
       expect(result.accessToken).toBe('signed.jwt.token');

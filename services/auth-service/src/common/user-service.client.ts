@@ -27,12 +27,21 @@ export class UserServiceClient {
     const path = '/internal/users';
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const nonce = randomUUID();
+    const body: Record<string, unknown> = {
+      userId: payload.userId,
+      authCredentialId: payload.userId,
+      email: payload.email,
+      fullName: payload.fullName,
+    };
+    if (payload.phone) {
+      body.phone = payload.phone;
+    }
     const signature = signInternalRequest({
       method: 'POST',
       path,
       timestamp,
       nonce,
-      body: payload,
+      body,
       service: this.config.internalAuthService,
       secret: this.config.internalAuthSecret,
     });
@@ -46,7 +55,7 @@ export class UserServiceClient {
         [INTERNAL_AUTH_HEADERS.nonce]: nonce,
         [INTERNAL_AUTH_HEADERS.signature]: signature,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {

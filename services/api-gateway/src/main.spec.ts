@@ -6,6 +6,7 @@ describe('gateway internal route exposure', () => {
     expect(isBlockedInternalRoute('/api/users/internal/profile')).toBe(true);
     expect(isBlockedInternalRoute('/api/users/Internal')).toBe(true);
     expect(isBlockedInternalRoute('/api/users/INTERNAL/users')).toBe(true);
+    expect(isBlockedInternalRoute('/internal/users')).toBe(true);
   });
 
   it('does not block normal user routes', () => {

@@ -10,7 +10,7 @@ From `services/user-service/src/controllers/users.controller.ts`:
 - `GET /users/me` – get the current authenticated profile
 - `PATCH /users/me` – update the current authenticated profile
 - `GET /users/me/orders` – fetch current user order history
-- `GET /users/:id` – get a user profile by ID
+- `GET /users/:id` – get a user profile by ID (own profile or admin)
 
 ## Dependencies
 - Calls `order-service` to fetch order history via `src/common/order-service.client.ts`
@@ -32,4 +32,4 @@ From `services/user-service/src/config/app-config.ts`:
 - `NODE_ENV` (default: `development`)
 
 ## Notes
-The service acts as the canonical user-data layer for profile details and exposes a few internal endpoints that are intended for service-to-service use. `POST /internal/users` requires the HMAC internal-auth contract in [ADR 001](../adr/001-internal-service-authentication.md). Redis stores short-lived nonces with `SET NX EX` so a signed request cannot be replayed within the acceptance window. Profile ownership enforcement for `GET /users/:id` remains DP-057 work.
+The service acts as the canonical user-data layer for profile details. `POST /internal/users` requires the HMAC internal-auth contract in [ADR 001](../adr/001-internal-service-authentication.md) and records the verified caller in `createdByService`. Redis stores short-lived nonces with `SET NX EX` so a signed request cannot be replayed within the acceptance window. Profile rows store an explicit `authCredentialId` that must equal the profile `id` (the auth-service credential UUID). `GET /users/:id` is limited to the owning user or an admin. `GET/PATCH /users/me` and `GET /users/me/orders` require the JWT subject and email to match the stored profile.
