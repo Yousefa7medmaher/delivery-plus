@@ -1,3 +1,4 @@
+import { extractPathParameters, joinPublicPath, validatePublicOpenApiDocument } from './public-openapi';
 import { isBlockedInternalRoute } from './route-policy';
 import { getServicePrefix, rewriteProxyPath } from './main';
 
@@ -36,5 +37,69 @@ describe('gateway internal route exposure', () => {
     expect(rewriteProxyPath('/api/auth', '/docs-json?cache=1')).toBe('/docs-json?cache=1');
     expect(rewriteProxyPath('/api/auth', '/docs-json/subpath')).toBe('/docs-json');
     expect(rewriteProxyPath('/api/auth', '/docs-json/subpath?cache=1')).toBe('/docs-json?cache=1');
+  });
+
+  it('converts Express-style path params into OpenAPI path templates', () => {
+    expect(joinPublicPath('/api/users', '/:id')).toBe('/api/users/{id}');
+    expect(joinPublicPath('/api/restaurants', '/:restaurantId/menu/:menuItemId')).toBe(
+      '/api/restaurants/{restaurantId}/menu/{menuItemId}',
+    );
+  });
+
+  it('extracts required path parameters and ignores duplicates', () => {
+    expect(extractPathParameters('/api/users/{id}/orders/{orderId}')).toEqual(['id', 'orderId']);
+    expect(extractPathParameters('/api/users/:id')).toEqual(['id']);
+  });
+
+  it('validates path syntax and parameter definitions', () => {
+    const validDoc = {
+      openapi: '3.0.3',
+      servers: [{ url: 'http://localhost:3000' }],
+      paths: {
+        '/api/users/{id}': {
+          get: {
+            operationId: 'users_get_user',
+            parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+            responses: { '200': { description: 'ok' } },
+          },
+        },
+      },
+      tags: [{ name: 'users' }],
+    };
+
+    expect(() => validatePublicOpenApiDocument(validDoc, ['/api/users'])).not.toThrow();
+    expect(() =>
+      validatePublicOpenApiDocument(
+        {
+          ...validDoc,
+          paths: {
+            '/api/users/:id': {
+              get: {
+                operationId: 'users_get_user',
+                parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+                responses: { '200': { description: 'ok' } },
+              },
+            },
+          },
+        },
+        ['/api/users'],
+      ),
+    ).toThrow(/Express-style.*:id|path.*:id/i);
+    expect(() =>
+      validatePublicOpenApiDocument(
+        {
+          ...validDoc,
+          paths: {
+            '/api/cartography': {
+              get: {
+                operationId: 'cartography_get',
+                responses: { '200': { description: 'ok' } },
+              },
+            },
+          },
+        },
+        ['/api/cart'],
+      ),
+    ).toThrow(/service prefix|\/api\/cart/i);
   });
 });
