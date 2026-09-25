@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { BadRequestError, ForbiddenError, NotFoundError, OrderStatus } from '@food-delivery/shared';
+import { BadRequestError, ForbiddenError, NotFoundError, OrderStatus, assertValidUuidV4 } from '@food-delivery/shared';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 import { SystemTokenService } from './system-token.service';
 
@@ -20,18 +20,19 @@ export class OrderServiceClient {
 
   /** Uses the customer's own token — they're allowed to read their own order. */
   async getOrder(orderId: string, authHeader: string): Promise<OrderDto> {
-    const response = await fetch(`${this.config.orderServiceUrl}/orders/${orderId}`, {
+    const safeOrderId = assertValidUuidV4(orderId, 'orderId');
+    const response = await fetch(`${this.config.orderServiceUrl}/orders/${safeOrderId}`, {
       headers: { Authorization: authHeader },
     });
 
     if (response.status === 404) {
-      throw new NotFoundError(`Order ${orderId} not found`);
+      throw new NotFoundError(`Order ${safeOrderId} not found`);
     }
     if (response.status === 403) {
       throw new ForbiddenError('You do not have access to this order');
     }
     if (!response.ok) {
-      throw new BadRequestError(`Failed to fetch order ${orderId}`);
+      throw new BadRequestError(`Failed to fetch order ${safeOrderId}`);
     }
 
     return (await response.json()) as OrderDto;
@@ -39,15 +40,16 @@ export class OrderServiceClient {
 
   /** Uses a minted service token (see SystemTokenService) since this is a system-triggered transition. */
   async updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
+    const safeOrderId = assertValidUuidV4(orderId, 'orderId');
     const authHeader = await this.systemToken.mint();
-    const response = await fetch(`${this.config.orderServiceUrl}/orders/${orderId}/status`, {
+    const response = await fetch(`${this.config.orderServiceUrl}/orders/${safeOrderId}/status`, {
       method: 'PATCH',
       headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to update order ${orderId} to ${status} (status ${response.status})`);
+      throw new Error(`Failed to update order ${safeOrderId} to ${status} (status ${response.status})`);
     }
   }
 }
