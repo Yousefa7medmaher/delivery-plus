@@ -34,10 +34,25 @@ export function loadConfig(): AppConfig {
     internalAuthService: process.env.INTERNAL_AUTH_SERVICE || 'auth-service',
     internalAuthSecret: requireInternalAuthSecret(),
     emailVerificationRequired: parseBoolean(process.env.EMAIL_VERIFICATION_REQUIRED, false),
-    maxFailedLoginAttempts: parseInt(process.env.MAX_FAILED_LOGIN_ATTEMPTS || '5', 10),
-    lockoutMinutes: parseInt(process.env.LOCKOUT_MINUTES || '15', 10),
+    maxFailedLoginAttempts: parsePositiveInt('MAX_FAILED_LOGIN_ATTEMPTS', 5),
+    lockoutMinutes: parsePositiveInt('LOCKOUT_MINUTES', 15),
     verificationTokenTtlMinutes: parseInt(process.env.VERIFICATION_TOKEN_TTL_MINUTES || '60', 10),
   };
+}
+
+function parsePositiveInt(key: string, defaultValue: number): number {
+  const raw = process.env[key];
+
+  if (raw === undefined || raw === '') {
+    return defaultValue;
+  }
+
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`Invalid ${key}: ${raw}`);
+  }
+
+  return value;
 }
 
 function parseBoolean(value: string | undefined, defaultValue: boolean): boolean {

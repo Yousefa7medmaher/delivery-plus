@@ -33,5 +33,8 @@ describe('gateway internal route exposure', () => {
     expect(rewriteProxyPath('/api/menus', '/restaurants/abc/menu')).toBe('/restaurants/abc/menu');
     expect(rewriteProxyPath('/api/menus', '/docs-json')).toBe('/docs-json');
     expect(rewriteProxyPath('/api/auth', '/docs-json')).toBe('/docs-json');
+    expect(rewriteProxyPath('/api/auth', '/docs-json?cache=1')).toBe('/docs-json?cache=1');
+    expect(rewriteProxyPath('/api/auth', '/docs-json/subpath')).toBe('/docs-json');
+    expect(rewriteProxyPath('/api/auth', '/docs-json/subpath?cache=1')).toBe('/docs-json?cache=1');
   });
 });

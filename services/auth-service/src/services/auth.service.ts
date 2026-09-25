@@ -70,43 +70,34 @@ export class AuthService {
       throw new UnauthorizedError('Invalid email or password');
     }
 
-    if (this.config.emailVerificationRequired && !credential.emailVerified) {
-      throw new UnauthorizedError('Please verify your email before logging in');
-    }
-
     if (credential.lockedUntil && credential.lockedUntil.getTime() > Date.now()) {
       throw new UnauthorizedError('Invalid email or password');
     }
 
+    if (credential.lockedUntil && credential.lockedUntil.getTime() <= Date.now()) {
+      await this.credentials.resetFailureState(credential.id);
+    }
+
     const passwordMatches = await bcrypt.compare(dto.password, credential.passwordHash);
     if (!passwordMatches) {
-      const nextCount = (credential.failedLoginCount || 0) + 1;
-      const now = new Date();
+      const updatedCredential = await this.credentials.recordFailedLogin(credential.id, new Date());
+      const nextCount = updatedCredential?.failedLoginCount ?? 1;
       const shouldLock = nextCount >= this.config.maxFailedLoginAttempts;
-      const lockUntil = shouldLock ? this.addMinutes(now, this.config.lockoutMinutes) : null;
 
-      await this.credentials.update(credential.id, {
-        failedLoginCount: nextCount,
-        lastFailedLoginAt: now,
-        lockedUntil: lockUntil,
-      });
+      if (shouldLock) {
+        await this.credentials.update(credential.id, {
+          lockedUntil: this.addMinutes(new Date(), this.config.lockoutMinutes),
+        });
+      }
 
       throw new UnauthorizedError('Invalid email or password');
     }
 
-    if (credential.lockedUntil && credential.lockedUntil.getTime() <= Date.now()) {
-      await this.credentials.update(credential.id, {
-        lockedUntil: null,
-        failedLoginCount: 0,
-        lastFailedLoginAt: null,
-      });
+    if (this.config.emailVerificationRequired && !credential.emailVerified) {
+      throw new UnauthorizedError('Please verify your email before logging in');
     }
 
-    await this.credentials.update(credential.id, {
-      failedLoginCount: 0,
-      lockedUntil: null,
-      lastFailedLoginAt: null,
-    });
+    await this.credentials.resetFailureState(credential.id);
 
     return this.issueToken(credential.id, credential.email, credential.role);
   }

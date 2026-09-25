@@ -54,7 +54,23 @@ Those values are set in [docker-compose.yml](../docker-compose.yml) and enable t
 
 ### 3. Swagger aggregation
 
-The gateway sets up Swagger endpoints and exposes grouped API documentation, making the platform easier to explore without contacting each service individually.
+The gateway sets up Swagger endpoints and exposes grouped API documentation, making the platform easier to explore without contacting each service individually. In addition to the live gateway docs, the repository now includes a generated public contract at [docs/openapi/delivery-plus-public.json](../docs/openapi/delivery-plus-public.json) that represents the public Gateway API surface for Apidog import and API automation.
+
+The public contract intentionally excludes internal-only routes and keeps the public path model aligned with the Gateway prefixes:
+
+- `/api/auth`
+- `/api/users`
+- `/api/restaurants`
+- `/api/menus`
+- `/api/cart`
+- `/api/orders`
+- `/api/payments`
+- `/api/deliveries`
+- `/api/drivers`
+- `/api/tracking`
+- `/api/notifications`
+
+The Menu service remains a special case because its controllers are mounted at the root and therefore must be exposed under `/api/menus` at the gateway boundary without breaking the service’s own root-level internal paths.
 
 ## Health and readiness
 

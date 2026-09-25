@@ -24,8 +24,10 @@ export function getServicePrefix(gatewayPath: string): string {
 }
 
 export function rewriteProxyPath(gatewayPath: string, incomingPath: string): string {
-  if (/^\/docs-json(?:\/|$)/.test(incomingPath)) {
-    return '/docs-json';
+  const [pathname, queryString = ''] = incomingPath.split('?');
+
+  if (/^\/docs-json(?:\/|$)/.test(pathname)) {
+    return `/docs-json${queryString ? `?${queryString}` : ''}`;
   }
 
   return `${getServicePrefix(gatewayPath)}${incomingPath}`;

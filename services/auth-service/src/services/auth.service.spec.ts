@@ -2,8 +2,11 @@ import { AuthService } from './auth.service';
 import { CredentialsRepository } from '../repositories/credentials.repository';
 import { UserServiceClient } from '../common/user-service.client';
 import { JwtService } from '@nestjs/jwt';
-import { UserRole, ConflictError, UnauthorizedError } from '@food-delivery/shared';
+import { UserRole, ConflictError, UnauthorizedError, RateLimitGuard, RATE_LIMIT_KEY } from '@food-delivery/shared';
 import * as bcrypt from 'bcrypt';
+import { createHash } from 'node:crypto';
+import { loadConfig } from '../config/app-config';
+import { AuthController } from '../controllers/auth.controller';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -17,6 +20,8 @@ describe('AuthService', () => {
       findById: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      recordFailedLogin: jest.fn(),
+      resetFailureState: jest.fn(),
       deleteById: jest.fn(),
     } as unknown as jest.Mocked<CredentialsRepository>;
 
@@ -42,6 +47,104 @@ describe('AuthService', () => {
       maxFailedLoginAttempts: 5,
       lockoutMinutes: 15,
       verificationTokenTtlMinutes: 60,
+    });
+  });
+
+  describe('config validation', () => {
+    const originalEnv = { ...process.env };
+
+    afterEach(() => {
+      for (const key of Object.keys(process.env)) {
+        if (!(key in originalEnv)) {
+          delete process.env[key];
+        }
+      }
+      for (const [key, value] of Object.entries(originalEnv)) {
+        process.env[key] = value;
+      }
+    });
+
+    it('accepts valid positive integer configuration values', () => {
+      process.env.DATABASE_URL = 'postgres://postgres:postgres@localhost:5432/auth_service';
+      process.env.JWT_SECRET = 'secret';
+      process.env.MAX_FAILED_LOGIN_ATTEMPTS = '7';
+      process.env.LOCKOUT_MINUTES = '30';
+
+      const config = loadConfig();
+
+      expect(config.maxFailedLoginAttempts).toBe(7);
+      expect(config.lockoutMinutes).toBe(30);
+    });
+
+    it.each([
+      ['unset', undefined, 5],
+      ['empty', '', 5],
+      ['zero', '0', 0],
+      ['negative', '-1', -1],
+      ['decimal', '1.5', 1.5],
+      ['non-numeric', 'abc', NaN],
+    ])('rejects invalid MAX_FAILED_LOGIN_ATTEMPTS values for %s', (_label, rawValue, expected) => {
+      process.env.DATABASE_URL = 'postgres://postgres:postgres@localhost:5432/auth_service';
+      process.env.JWT_SECRET = 'secret';
+      if (rawValue === undefined) {
+        delete process.env.MAX_FAILED_LOGIN_ATTEMPTS;
+      } else {
+        process.env.MAX_FAILED_LOGIN_ATTEMPTS = rawValue;
+      }
+      process.env.LOCKOUT_MINUTES = '15';
+
+      if (_label === 'unset' || _label === 'empty') {
+        expect(loadConfig().maxFailedLoginAttempts).toBe(5);
+        return;
+      }
+
+      expect(() => loadConfig()).toThrow(`Invalid MAX_FAILED_LOGIN_ATTEMPTS: ${rawValue}`);
+      expect(expected).toBeDefined();
+    });
+
+    it.each([
+      ['unset', undefined, 15],
+      ['empty', '', 15],
+      ['zero', '0', 0],
+      ['negative', '-1', -1],
+      ['decimal', '1.5', 1.5],
+      ['non-numeric', 'abc', NaN],
+    ])('rejects invalid LOCKOUT_MINUTES values for %s', (_label, rawValue, expected) => {
+      process.env.DATABASE_URL = 'postgres://postgres:postgres@localhost:5432/auth_service';
+      process.env.JWT_SECRET = 'secret';
+      process.env.MAX_FAILED_LOGIN_ATTEMPTS = '5';
+      if (rawValue === undefined) {
+        delete process.env.LOCKOUT_MINUTES;
+      } else {
+        process.env.LOCKOUT_MINUTES = rawValue;
+      }
+
+      if (_label === 'unset' || _label === 'empty') {
+        expect(loadConfig().lockoutMinutes).toBe(15);
+        return;
+      }
+
+      expect(() => loadConfig()).toThrow(`Invalid LOCKOUT_MINUTES: ${rawValue}`);
+      expect(expected).toBeDefined();
+    });
+  });
+
+  describe('route rate limiting', () => {
+    it('applies the shared rate limiter to verification routes', () => {
+      expect(Reflect.getMetadata(RATE_LIMIT_KEY, AuthController.prototype.verifyEmail)).toEqual({
+        limit: 5,
+        windowSeconds: 60,
+      });
+      expect(Reflect.getMetadata(RATE_LIMIT_KEY, AuthController.prototype.resendVerification)).toEqual({
+        limit: 5,
+        windowSeconds: 60,
+      });
+      expect(Reflect.getMetadata('__guards__', AuthController.prototype.verifyEmail)).toEqual(
+        expect.arrayContaining([RateLimitGuard]),
+      );
+      expect(Reflect.getMetadata('__guards__', AuthController.prototype.resendVerification)).toEqual(
+        expect.arrayContaining([RateLimitGuard]),
+      );
     });
   });
 
@@ -128,33 +231,51 @@ describe('AuthService', () => {
   describe('login', () => {
     it('throws UnauthorizedError for unknown email', async () => {
       credentials.findByEmail.mockResolvedValue(null);
-      await expect(
-        service.login({ email: 'nope@a.com', password: 'whatever' }),
-      ).rejects.toThrow(UnauthorizedError);
+      await expect(service.login({ email: 'nope@a.com', password: 'whatever' })).rejects.toThrow(
+        UnauthorizedError,
+      );
     });
 
-    it('throws UnauthorizedError for wrong password', async () => {
-      const hash = await bcrypt.hash('correct-password', 10);
-      credentials.findByEmail.mockResolvedValue({
-        id: 'u1',
-        email: 'd@d.com',
-        passwordHash: hash,
-        role: UserRole.CUSTOMER,
-        emailVerified: true,
-        failedLoginCount: 0,
-        lockedUntil: null,
-        verificationTokenHash: null,
-        verificationTokenExpiresAt: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      } as any);
+    it.each([true, false])(
+      'throws the generic authentication error for wrong passwords on %s accounts',
+      async (emailVerified) => {
+        const hash = await bcrypt.hash('correct-password', 10);
+        credentials.findByEmail.mockResolvedValue({
+          id: 'u1',
+          email: 'd@d.com',
+          passwordHash: hash,
+          role: UserRole.CUSTOMER,
+          emailVerified,
+          failedLoginCount: 0,
+          lockedUntil: null,
+          verificationTokenHash: null,
+          verificationTokenExpiresAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as any);
+        credentials.recordFailedLogin.mockResolvedValue({
+          id: 'u1',
+          email: 'd@d.com',
+          passwordHash: hash,
+          role: UserRole.CUSTOMER,
+          emailVerified,
+          failedLoginCount: 1,
+          lockedUntil: null,
+          lastFailedLoginAt: new Date(),
+          verificationTokenHash: null,
+          verificationTokenExpiresAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as any);
 
-      await expect(
-        service.login({ email: 'd@d.com', password: 'wrong-password' }),
-      ).rejects.toThrow(UnauthorizedError);
-    });
+        await expect(service.login({ email: 'd@d.com', password: 'wrong-password' })).rejects.toThrow(
+          'Invalid email or password',
+        );
+        expect(credentials.recordFailedLogin).toHaveBeenCalledWith('u1', expect.any(Date));
+      },
+    );
 
-    it('returns a token for correct credentials and resets failure state', async () => {
+    it('returns a token for verified credentials and resets failure state', async () => {
       const hash = await bcrypt.hash('correct-password', 10);
       credentials.findByEmail.mockResolvedValue({
         id: 'u1',
@@ -172,10 +293,7 @@ describe('AuthService', () => {
       credentials.update.mockResolvedValue({} as any);
 
       const result = await service.login({ email: 'e@e.com', password: 'correct-password' });
-      expect(credentials.update).toHaveBeenCalledWith(
-        'u1',
-        expect.objectContaining({ failedLoginCount: 0, lockedUntil: null }),
-      );
+      expect(credentials.resetFailureState).toHaveBeenCalledWith('u1');
       expect(result.accessToken).toBe('signed.jwt.token');
       expect(result.role).toBe(UserRole.ADMIN);
     });
@@ -195,16 +313,29 @@ describe('AuthService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       } as any);
-      credentials.update.mockResolvedValue({} as any);
+      credentials.recordFailedLogin.mockResolvedValue({
+        id: 'u1',
+        email: 'locked@example.com',
+        passwordHash: hash,
+        role: UserRole.CUSTOMER,
+        emailVerified: true,
+        failedLoginCount: 5,
+        lockedUntil: null,
+        lastFailedLoginAt: new Date(),
+        verificationTokenHash: null,
+        verificationTokenExpiresAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
 
-      await expect(
-        service.login({ email: 'locked@example.com', password: 'wrong-password' }),
-      ).rejects.toThrow(UnauthorizedError);
+      await expect(service.login({ email: 'locked@example.com', password: 'wrong-password' })).rejects.toThrow(
+        'Invalid email or password',
+      );
 
+      expect(credentials.recordFailedLogin).toHaveBeenCalledWith('u1', expect.any(Date));
       expect(credentials.update).toHaveBeenCalledWith(
         'u1',
         expect.objectContaining({
-          failedLoginCount: expect.any(Number),
           lockedUntil: expect.any(Date),
         }),
       );
@@ -228,12 +359,100 @@ describe('AuthService', () => {
 
       await expect(
         service.login({ email: 'locked@example.com', password: 'correct-password' }),
-      ).rejects.toThrow(UnauthorizedError);
+      ).rejects.toThrow('Invalid email or password');
+    });
+
+    it('starts a new failure sequence from 1 after an expired lockout', async () => {
+      const hash = await bcrypt.hash('correct-password', 10);
+      credentials.findByEmail.mockResolvedValue({
+        id: 'u1',
+        email: 'expired@example.com',
+        passwordHash: hash,
+        role: UserRole.CUSTOMER,
+        emailVerified: true,
+        failedLoginCount: 5,
+        lockedUntil: new Date(Date.now() - 1000),
+        verificationTokenHash: null,
+        verificationTokenExpiresAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+      credentials.recordFailedLogin.mockResolvedValue({
+        id: 'u1',
+        email: 'expired@example.com',
+        passwordHash: hash,
+        role: UserRole.CUSTOMER,
+        emailVerified: true,
+        failedLoginCount: 1,
+        lockedUntil: null,
+        lastFailedLoginAt: new Date(),
+        verificationTokenHash: null,
+        verificationTokenExpiresAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      await expect(service.login({ email: 'expired@example.com', password: 'wrong-password' })).rejects.toThrow(
+        'Invalid email or password',
+      );
+
+      expect(credentials.resetFailureState).toHaveBeenCalledWith('u1');
+      expect(credentials.recordFailedLogin).toHaveBeenCalledWith('u1', expect.any(Date));
+    });
+
+    it('clears the failure state and lock when valid credentials are used after an expired lock', async () => {
+      const hash = await bcrypt.hash('correct-password', 10);
+      credentials.findByEmail.mockResolvedValue({
+        id: 'u1',
+        email: 'expired@example.com',
+        passwordHash: hash,
+        role: UserRole.CUSTOMER,
+        emailVerified: true,
+        failedLoginCount: 5,
+        lockedUntil: new Date(Date.now() - 1000),
+        verificationTokenHash: null,
+        verificationTokenExpiresAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+      credentials.update.mockResolvedValue({} as any);
+
+      await service.login({ email: 'expired@example.com', password: 'correct-password' });
+
+      expect(credentials.resetFailureState).toHaveBeenCalledWith('u1');
+    });
+
+    it('requires email verification before a successful login when enabled', async () => {
+      const hash = await bcrypt.hash('correct-password', 10);
+      service = new AuthService(credentials, userServiceClient, jwtService, {
+        ...service['config'],
+        emailVerificationRequired: true,
+      });
+
+      credentials.findByEmail.mockResolvedValue({
+        id: 'u1',
+        email: 'verify@example.com',
+        passwordHash: hash,
+        role: UserRole.CUSTOMER,
+        emailVerified: false,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        verificationTokenHash: null,
+        verificationTokenExpiresAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      await expect(service.login({ email: 'verify@example.com', password: 'correct-password' })).rejects.toThrow(
+        'Please verify your email before logging in',
+      );
     });
   });
 
   describe('email verification', () => {
-    it('rejects expired or already-used verification tokens', async () => {
+    it('accepts a valid verification token and clears it after success', async () => {
+      const token = 'token-123';
+      const tokenHash = createHash('sha256').update(token).digest('hex');
       credentials.findByEmail.mockResolvedValue({
         id: 'u1',
         email: 'verify@example.com',
@@ -242,15 +461,87 @@ describe('AuthService', () => {
         emailVerified: false,
         failedLoginCount: 0,
         lockedUntil: null,
-        verificationTokenHash: 'used-hash',
+        verificationTokenHash: tokenHash,
+        verificationTokenExpiresAt: new Date(Date.now() + 60_000),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+      credentials.update.mockResolvedValue({} as any);
+
+      await expect(service.verifyEmail({ email: 'verify@example.com', token })).resolves.toEqual({
+        message: 'Email verified successfully',
+      });
+
+      expect(credentials.update).toHaveBeenCalledWith(
+        'u1',
+        expect.objectContaining({
+          emailVerified: true,
+          verificationTokenHash: null,
+          verificationTokenExpiresAt: null,
+        }),
+      );
+    });
+
+    it('rejects expired verification tokens', async () => {
+      const token = 'token-123';
+      const tokenHash = createHash('sha256').update(token).digest('hex');
+      credentials.findByEmail.mockResolvedValue({
+        id: 'u1',
+        email: 'verify@example.com',
+        passwordHash: 'hash',
+        role: UserRole.CUSTOMER,
+        emailVerified: false,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        verificationTokenHash: tokenHash,
         verificationTokenExpiresAt: new Date(Date.now() - 1000),
         createdAt: new Date(),
         updatedAt: new Date(),
       } as any);
 
-      await expect(
-        service.verifyEmail({ email: 'verify@example.com', token: 'token-123' }),
-      ).rejects.toThrow(UnauthorizedError);
+      await expect(service.verifyEmail({ email: 'verify@example.com', token })).rejects.toThrow(
+        'Invalid or expired verification token',
+      );
+    });
+
+    it('rejects wrong verification tokens', async () => {
+      credentials.findByEmail.mockResolvedValue({
+        id: 'u1',
+        email: 'verify@example.com',
+        passwordHash: 'hash',
+        role: UserRole.CUSTOMER,
+        emailVerified: false,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        verificationTokenHash: createHash('sha256').update('other-token').digest('hex'),
+        verificationTokenExpiresAt: new Date(Date.now() + 60_000),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      await expect(service.verifyEmail({ email: 'verify@example.com', token: 'token-123' })).rejects.toThrow(
+        'Invalid or expired verification token',
+      );
+    });
+
+    it('rejects already-used verification tokens independently of expiry', async () => {
+      credentials.findByEmail.mockResolvedValue({
+        id: 'u1',
+        email: 'verify@example.com',
+        passwordHash: 'hash',
+        role: UserRole.CUSTOMER,
+        emailVerified: false,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        verificationTokenHash: null,
+        verificationTokenExpiresAt: new Date(Date.now() + 60_000),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      await expect(service.verifyEmail({ email: 'verify@example.com', token: 'token-123' })).rejects.toThrow(
+        'Invalid or expired verification token',
+      );
     });
 
     it('issues a safe resend-verification response for existing accounts', async () => {

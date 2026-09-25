@@ -41,6 +41,38 @@ export class CredentialsRepository {
     return this.findById(id);
   }
 
+  async recordFailedLogin(id: string, failedAt: Date): Promise<Credential | null> {
+    await this.repo.query(
+      `
+        UPDATE credentials
+        SET "failedLoginCount" = CASE
+          WHEN "lockedUntil" IS NOT NULL AND "lockedUntil" <= $1 THEN 1
+          ELSE "failedLoginCount" + 1
+        END,
+            "lastFailedLoginAt" = $1,
+            "lockedUntil" = CASE
+              WHEN "lockedUntil" IS NOT NULL AND "lockedUntil" <= $1 THEN NULL
+              ELSE "lockedUntil"
+            END
+        WHERE id = $2
+      `,
+      [failedAt, id],
+    );
+
+    return this.findById(id);
+  }
+
+  async resetFailureState(id: string): Promise<void> {
+    await this.repo.update(
+      { id },
+      {
+        failedLoginCount: 0,
+        lockedUntil: null,
+        lastFailedLoginAt: null,
+      },
+    );
+  }
+
   async deleteById(id: string): Promise<void> {
     await this.repo.delete({ id });
   }

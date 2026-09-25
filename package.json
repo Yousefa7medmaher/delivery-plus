@@ -12,6 +12,8 @@
     "test": "npm run test --workspaces --if-present",
     "test:ci": "npm run lint && npm test && npm run build",
     "verify": "npm run test:ci",
+    "openapi:generate": "tsx scripts/generate-public-openapi.ts",
+    "openapi:validate": "tsx scripts/validate-public-openapi.ts",
     "migration:generate": "npm run migration:generate --workspaces --if-present",
     "migration:run": "npm run migration:run --workspaces --if-present",
     "migration:revert": "npm run migration:revert --workspaces --if-present",

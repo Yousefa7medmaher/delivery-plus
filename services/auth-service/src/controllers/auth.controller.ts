@@ -32,6 +32,8 @@ export class AuthController {
   }
 
   @Post('verify-email')
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ limit: 5, windowSeconds: 60 })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify an email using a one-time verification token' })
   verifyEmail(@Body() dto: VerifyEmailDto): Promise<{ message: string }> {
@@ -39,6 +41,8 @@ export class AuthController {
   }
 
   @Post('resend-verification')
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ limit: 5, windowSeconds: 60 })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend a verification email if the account is not already verified' })
   resendVerification(@Body() dto: ResendVerificationDto): Promise<{ message: string }> {
