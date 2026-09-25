@@ -11,6 +11,14 @@ export class CreateProfileDto {
   userId!: string;
 
   @ApiProperty({
+    description: 'Auth-service credential UUID this profile maps to. Must equal userId.',
+    format: 'uuid',
+    example: '9df9a9b2-1b3d-4f0b-8e6a-3f1f04e2cb77',
+  })
+  @IsUUID()
+  authCredentialId!: string;
+
+  @ApiProperty({
     description: 'Primary email address for the profile.',
     format: 'email',
     example: 'profile@example.com',

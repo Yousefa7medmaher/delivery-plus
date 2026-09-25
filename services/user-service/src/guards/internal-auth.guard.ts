@@ -53,6 +53,7 @@ export class InternalAuthGuard implements CanActivate {
       throw new UnauthorizedException('Replayed internal service request');
     }
 
+    request.internalService = service;
     return true;
   }
 }

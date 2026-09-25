@@ -14,12 +14,17 @@ export class ProfilesRepository {
     return this.repo.findOne({ where: { id } });
   }
 
-  async create(data: Pick<UserProfile, 'id' | 'email' | 'fullName' | 'phone'>): Promise<UserProfile> {
+  async create(
+    data: Pick<UserProfile, 'id' | 'authCredentialId' | 'createdByService' | 'email' | 'fullName' | 'phone'>,
+  ): Promise<UserProfile> {
     const entity = this.repo.create(data);
     return this.repo.save(entity);
   }
 
-  async update(id: string, data: Partial<UserProfile>): Promise<UserProfile | null> {
+  async update(
+    id: string,
+    data: Partial<Pick<UserProfile, 'fullName' | 'phone' | 'address'>>,
+  ): Promise<UserProfile | null> {
     await this.repo.update({ id }, data);
     return this.findById(id);
   }

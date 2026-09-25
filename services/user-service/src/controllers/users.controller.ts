@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard, CurrentUser, JwtPayload } from '@food-delivery/shared';
 import { UsersService } from '../services/users.service';
@@ -17,8 +17,11 @@ export class UsersController {
   @ApiOperation({
     summary: 'Internal: create a profile (called synchronously by auth-service on registration)',
   })
-  createProfile(@Body() dto: CreateProfileDto): Promise<UserProfile> {
-    return this.usersService.createProfile(dto);
+  createProfile(
+    @Body() dto: CreateProfileDto,
+    @Req() request: { internalService?: string },
+  ): Promise<UserProfile> {
+    return this.usersService.createProfile(dto, request.internalService ?? '');
   }
 
   @Get('users/me')
@@ -26,7 +29,7 @@ export class UsersController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get the current authenticated user profile' })
   getMe(@CurrentUser() user: JwtPayload): Promise<UserProfile> {
-    return this.usersService.getProfile(user.sub);
+    return this.usersService.getOwnProfile(user);
   }
 
   @Patch('users/me')
@@ -34,7 +37,7 @@ export class UsersController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update the current authenticated user profile' })
   updateMe(@CurrentUser() user: JwtPayload, @Body() dto: UpdateProfileDto): Promise<UserProfile> {
-    return this.usersService.updateProfile(user.sub, dto);
+    return this.usersService.updateOwnProfile(user, dto);
   }
 
   @Get('users/me/orders')
@@ -42,18 +45,19 @@ export class UsersController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get the current user order history (proxied from order-service)' })
   getMyOrders(
+    @CurrentUser() user: JwtPayload,
     @Headers('authorization') authHeader: string,
     @Query('page') page = '1',
     @Query('limit') limit = '20',
   ) {
-    return this.usersService.getOrderHistory(authHeader, parseInt(page, 10), parseInt(limit, 10));
+    return this.usersService.getOrderHistory(user, authHeader, parseInt(page, 10), parseInt(limit, 10));
   }
 
   @Get('users/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get a user profile by id' })
-  getById(@Param('id') id: string): Promise<UserProfile> {
-    return this.usersService.getProfile(id);
+  @ApiOperation({ summary: 'Get a user profile by id (self or admin)' })
+  getById(@Param('id') id: string, @CurrentUser() user: JwtPayload): Promise<UserProfile> {
+    return this.usersService.getProfileById(id, user);
   }
 }

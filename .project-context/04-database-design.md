@@ -16,7 +16,7 @@ The service-level database design matches the entity models in each service and 
 | Service | Persistence store | Core domain tables | Key design notes |
 | --- | --- | --- | --- |
 | auth-service | PostgreSQL | credentials | Stores user credentials and canonical `userId` identity |
-| user-service | PostgreSQL | user_profiles | Stores profile detail keyed by the same `id` as auth credentials |
+| user-service | PostgreSQL | user_profiles | Stores profile detail keyed by the same `id` as auth credentials, plus `authCredentialId` and `createdByService` |
 | restaurant-service | PostgreSQL | restaurants | Restaurant ownership and operating state |
 | menu-service | PostgreSQL | menu_items | Catalog data keyed by restaurant and optional category |
 | cart-service | Redis | cart state | Customer-scoped cart; not a relational table |
@@ -33,7 +33,7 @@ A consistent user identity is used across microservices:
 
 - `auth-service` is the identity source.
 - `Credential.id` is the canonical `userId` value.
-- `user-service` stores a profile row with the same UUID in `UserProfile.id`.
+- `user-service` stores a profile row with the same UUID in `UserProfile.id` and a matching `authCredentialId`.
 - `restaurant-service` stores `ownerId` as a userId of a `RESTAURANT_OWNER`.
 - `driver-service` stores `userId` for the driver credential record.
 
@@ -52,6 +52,8 @@ Both models share the same UUID-based identity notion:
 
 - `credentials.id` is the canonical auth id
 - `user_profiles.id` mirrors that same id
+- `user_profiles.authCredentialId` stores the explicit 1:1 credential mapping and must equal `id`
+- `user_profiles.createdByService` records the verified internal caller that created the profile
 - email uniqueness is protected with a unique index
 
 ### Restaurant and menu catalog

@@ -52,7 +52,7 @@ The workspace root defines commands, but actual validation is still service-spec
 - Kafka deduplication is in-memory, and exhausted consumer messages are committed without a real DLQ.
 - Delivery event publication is wired but not invoked by the current lifecycle methods.
 - Notification payment and delivery handlers are currently no-ops.
-- Internal user profile creation is unauthenticated, and user profile lookup does not enforce ownership/admin access.
+- Internal user profile creation requires HMAC service identity, and user profile lookup enforces owner or admin access.
 - Outbound service HTTP clients use native `fetch` without a shared timeout, retry, or circuit-breaker policy.
 - The payment service contains a manual SQL idempotency upgrade outside the normal TypeORM migration runner.
 - CI does not start Compose, execute migrations, run gateway-to-service integration tests, run the E2E script, or collect coverage.

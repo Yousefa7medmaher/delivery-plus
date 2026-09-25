@@ -46,8 +46,10 @@ describe('InternalAuthGuard', () => {
     return request;
   }
 
-  it('accepts a valid auth-service request and records its nonce', async () => {
-    await expect(guard.canActivate(contextFor(signedRequest()))).resolves.toBe(true);
+  it('accepts a valid auth-service request, records its nonce, and attaches the service identity', async () => {
+    const request = signedRequest();
+    await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+    expect(request.internalService).toBe('auth-service');
     expect(redis.set).toHaveBeenCalledWith(
       'internal-auth:nonce:auth-service:nonce-1',
       '1',
