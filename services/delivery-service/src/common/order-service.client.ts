@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { BadRequestError, NotFoundError, OrderStatus } from '@food-delivery/shared';
+import { BadRequestError, NotFoundError, OrderStatus, assertValidUuidV4 } from '@food-delivery/shared';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 import { SystemTokenService } from './system-token.service';
 
@@ -18,31 +18,33 @@ export class OrderServiceClient {
   ) {}
 
   async getOrder(orderId: string): Promise<OrderDto> {
+    const safeOrderId = assertValidUuidV4(orderId, 'orderId');
     const authHeader = await this.systemToken.mint();
-    const response = await fetch(`${this.config.orderServiceUrl}/orders/${orderId}`, {
+    const response = await fetch(`${this.config.orderServiceUrl}/orders/${safeOrderId}`, {
       headers: { Authorization: authHeader },
     });
 
     if (response.status === 404) {
-      throw new NotFoundError(`Order ${orderId} not found`);
+      throw new NotFoundError(`Order ${safeOrderId} not found`);
     }
     if (!response.ok) {
-      throw new BadRequestError(`Failed to fetch order ${orderId}`);
+      throw new BadRequestError(`Failed to fetch order ${safeOrderId}`);
     }
 
     return (await response.json()) as OrderDto;
   }
 
   async updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
+    const safeOrderId = assertValidUuidV4(orderId, 'orderId');
     const authHeader = await this.systemToken.mint();
-    const response = await fetch(`${this.config.orderServiceUrl}/orders/${orderId}/status`, {
+    const response = await fetch(`${this.config.orderServiceUrl}/orders/${safeOrderId}/status`, {
       method: 'PATCH',
       headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to update order ${orderId} to ${status} (status ${response.status})`);
+      throw new Error(`Failed to update order ${safeOrderId} to ${status} (status ${response.status})`);
     }
   }
 }

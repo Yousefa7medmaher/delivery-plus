@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { BadRequestError, DeliveryStatus, NotFoundError } from '@food-delivery/shared';
+import { BadRequestError, DeliveryStatus, NotFoundError, assertValidUuidV4 } from '@food-delivery/shared';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 
 export interface DeliveryDto {
@@ -14,15 +14,16 @@ export class DeliveryServiceClient {
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {}
 
   async getDelivery(deliveryId: string, authHeader: string): Promise<DeliveryDto> {
-    const response = await fetch(`${this.config.deliveryServiceUrl}/deliveries/${deliveryId}`, {
+    const safeDeliveryId = assertValidUuidV4(deliveryId, 'deliveryId');
+    const response = await fetch(`${this.config.deliveryServiceUrl}/deliveries/${safeDeliveryId}`, {
       headers: { Authorization: authHeader },
     });
 
     if (response.status === 404) {
-      throw new NotFoundError(`Delivery ${deliveryId} not found`);
+      throw new NotFoundError(`Delivery ${safeDeliveryId} not found`);
     }
     if (!response.ok) {
-      throw new BadRequestError(`Failed to fetch delivery ${deliveryId}`);
+      throw new BadRequestError(`Failed to fetch delivery ${safeDeliveryId}`);
     }
 
     return (await response.json()) as DeliveryDto;

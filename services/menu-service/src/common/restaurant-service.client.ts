@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { ForbiddenError, NotFoundError } from '@food-delivery/shared';
+import { ForbiddenError, NotFoundError, assertValidUuidV4 } from '@food-delivery/shared';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 
 /**
@@ -14,12 +14,14 @@ export class RestaurantServiceClient {
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {}
 
   async assertOwnership(restaurantId: string, requesterId: string): Promise<void> {
+    const safeRestaurantId = assertValidUuidV4(restaurantId, 'restaurantId');
+    const safeRequesterId = assertValidUuidV4(requesterId, 'requesterId');
     const response = await fetch(
-      `${this.config.restaurantServiceUrl}/restaurants/${restaurantId}/ownership/${requesterId}`,
+      `${this.config.restaurantServiceUrl}/restaurants/${safeRestaurantId}/ownership/${safeRequesterId}`,
     );
 
     if (response.status === 404) {
-      throw new NotFoundError(`Restaurant ${restaurantId} not found`);
+      throw new NotFoundError(`Restaurant ${safeRestaurantId} not found`);
     }
     if (response.status === 403) {
       throw new ForbiddenError('You do not own this restaurant');

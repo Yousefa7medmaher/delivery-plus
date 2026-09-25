@@ -57,6 +57,12 @@ Independently of the key, the database allows at most one payment per order in `
 | `COMPLETED` / `FAILED` | Returns the payment as-is. The outcome never changes on retry, even if `simulateFailure` differs. Only side effects that failed earlier are re-attempted. |
 | `REFUNDED` | `409` invalid state transition (unchanged). |
 
+### Shared internal client contract
+
+Every internal client that interpolates a path or resource ID into a downstream HTTP URL must validate it before the fetch. The shared helper `assertValidUuidV4()` in `shared/src/utils/id.ts` enforces a strict RFC 4122 v4 UUID, and throws a `BadRequestError` if a caller supplies a raw route param, JWT subject, or tampered value instead of a real UUID.
+
+This is intentionally enforced at the client boundary so malformed values are rejected before any SSRF-sensitive URL is constructed. The error remains a normal application error (`400 Bad Request`) rather than a suppressed or hidden runtime failure.
+
 ### Side effects: Kafka event + order update
 
 Each status that has side effects (`PENDING` → `payment.created` + order `PAYMENT_PENDING`; `COMPLETED` → `payment.completed` + order `CONFIRMED`; `FAILED` → `payment.failed` + order `FAILED`) records its progress on the payment row:

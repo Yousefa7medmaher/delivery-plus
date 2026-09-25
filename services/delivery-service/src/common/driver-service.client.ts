@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { BadRequestError, DriverStatus, NotFoundError } from '@food-delivery/shared';
+import { BadRequestError, DriverStatus, NotFoundError, assertValidUuidV4 } from '@food-delivery/shared';
 import { APP_CONFIG, AppConfig } from '../config/app-config';
 import { SystemTokenService } from './system-token.service';
 
@@ -17,12 +17,13 @@ export class DriverServiceClient {
   ) {}
 
   async getDriver(driverId: string): Promise<DriverDto> {
-    const response = await fetch(`${this.config.driverServiceUrl}/drivers/${driverId}`);
+    const safeDriverId = assertValidUuidV4(driverId, 'driverId');
+    const response = await fetch(`${this.config.driverServiceUrl}/drivers/${safeDriverId}`);
     if (response.status === 404) {
-      throw new NotFoundError(`Driver ${driverId} not found`);
+      throw new NotFoundError(`Driver ${safeDriverId} not found`);
     }
     if (!response.ok) {
-      throw new BadRequestError(`Failed to fetch driver ${driverId}`);
+      throw new BadRequestError(`Failed to fetch driver ${safeDriverId}`);
     }
     return (await response.json()) as DriverDto;
   }
@@ -38,15 +39,16 @@ export class DriverServiceClient {
   }
 
   async updateDriverStatus(driverId: string, status: DriverStatus): Promise<void> {
+    const safeDriverId = assertValidUuidV4(driverId, 'driverId');
     const authHeader = await this.systemToken.mint();
-    const response = await fetch(`${this.config.driverServiceUrl}/drivers/${driverId}/status`, {
+    const response = await fetch(`${this.config.driverServiceUrl}/drivers/${safeDriverId}/status`, {
       method: 'PATCH',
       headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to update driver ${driverId} to ${status} (status ${response.status})`);
+      throw new Error(`Failed to update driver ${safeDriverId} to ${status} (status ${response.status})`);
     }
   }
 }
