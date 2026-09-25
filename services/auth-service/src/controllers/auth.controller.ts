@@ -4,6 +4,8 @@ import { JwtAuthGuard, CurrentUser, JwtPayload, RateLimit, RateLimitGuard } from
 import { AuthService } from '../services/auth.service';
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
+import { VerifyEmailDto } from '../dto/verify-email.dto';
+import { ResendVerificationDto } from '../dto/resend-verification.dto';
 import { AuthResponseDto } from '../dto/auth-response.dto';
 import { RequestWithContext } from '@food-delivery/shared';
 
@@ -27,6 +29,20 @@ export class AuthController {
   @ApiOperation({ summary: 'Login and receive a JWT access token' })
   login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
     return this.authService.login(dto);
+  }
+
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify an email using a one-time verification token' })
+  verifyEmail(@Body() dto: VerifyEmailDto): Promise<{ message: string }> {
+    return this.authService.verifyEmail(dto);
+  }
+
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend a verification email if the account is not already verified' })
+  resendVerification(@Body() dto: ResendVerificationDto): Promise<{ message: string }> {
+    return this.authService.resendVerification(dto);
   }
 
   @Get('me')

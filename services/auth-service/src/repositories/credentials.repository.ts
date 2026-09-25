@@ -18,9 +18,27 @@ export class CredentialsRepository {
     return this.repo.findOne({ where: { id } });
   }
 
-  async create(data: Pick<Credential, 'email' | 'passwordHash' | 'role'>): Promise<Credential> {
+  async create(
+    data: Pick<
+      Credential,
+      | 'email'
+      | 'passwordHash'
+      | 'role'
+      | 'emailVerified'
+      | 'failedLoginCount'
+      | 'lockedUntil'
+      | 'lastFailedLoginAt'
+      | 'verificationTokenHash'
+      | 'verificationTokenExpiresAt'
+    >,
+  ): Promise<Credential> {
     const entity = this.repo.create(data);
     return this.repo.save(entity);
+  }
+
+  async update(id: string, data: Partial<Credential>): Promise<Credential | null> {
+    await this.repo.update({ id }, data);
+    return this.findById(id);
   }
 
   async deleteById(id: string): Promise<void> {

@@ -10,6 +10,10 @@ export interface AppConfig {
   userServiceUrl: string;
   internalAuthService: string;
   internalAuthSecret: string;
+  emailVerificationRequired: boolean;
+  maxFailedLoginAttempts: number;
+  lockoutMinutes: number;
+  verificationTokenTtlMinutes: number;
 }
 
 export function loadConfig(): AppConfig {
@@ -29,7 +33,16 @@ export function loadConfig(): AppConfig {
     userServiceUrl: process.env.USER_SERVICE_URL || 'http://localhost:3002',
     internalAuthService: process.env.INTERNAL_AUTH_SERVICE || 'auth-service',
     internalAuthSecret: requireInternalAuthSecret(),
+    emailVerificationRequired: parseBoolean(process.env.EMAIL_VERIFICATION_REQUIRED, false),
+    maxFailedLoginAttempts: parseInt(process.env.MAX_FAILED_LOGIN_ATTEMPTS || '5', 10),
+    lockoutMinutes: parseInt(process.env.LOCKOUT_MINUTES || '15', 10),
+    verificationTokenTtlMinutes: parseInt(process.env.VERIFICATION_TOKEN_TTL_MINUTES || '60', 10),
   };
+}
+
+function parseBoolean(value: string | undefined, defaultValue: boolean): boolean {
+  if (value === undefined) return defaultValue;
+  return value === 'true' || value === '1' || value === 'yes';
 }
 
 function requireInternalAuthSecret(): string {
