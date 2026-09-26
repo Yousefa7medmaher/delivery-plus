@@ -23,3 +23,7 @@ prompts/
 scripts/manage-issues.sh
 story.md
 structer.md
+apis.md
+
+# React Native mobile app lives in a separate repository
+/apps/

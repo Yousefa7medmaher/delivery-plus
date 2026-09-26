@@ -24,6 +24,12 @@ The project structure has Jest configuration in each service package, which sugg
 
 This is a typical microservice layout for focused unit and integration tests.
 
+## Contract and API automation
+
+The repository now includes a generated public OpenAPI contract at [docs/openapi/delivery-plus-public.json](../docs/openapi/delivery-plus-public.json). It is produced by the root script `npm run openapi:generate` and validated by `npm run openapi:validate`. The intent is to keep the contract aligned with the actual public Gateway route map while preventing private service-only paths and `/docs-json` endpoints from leaking into the public contract.
+
+This contract is designed to be imported into Apidog for workflow automation, while service-level Jest tests remain the code-level verification layer for controllers, guards, and service logic.
+
 ## Recommended test layers
 
 ### 1. Unit tests

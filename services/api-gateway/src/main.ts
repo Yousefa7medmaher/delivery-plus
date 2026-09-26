@@ -5,28 +5,38 @@ import { SwaggerModule } from '@nestjs/swagger';
 import { NextFunction, Request, Response } from 'express';
 import { isBlockedInternalRoute } from './route-policy';
 
+export const PROXIES = {
+  '/api/auth': process.env.AUTH_SERVICE_URL || 'http://localhost:3001',
+  '/api/users': process.env.USER_SERVICE_URL || 'http://localhost:3002',
+  '/api/restaurants': process.env.RESTAURANT_SERVICE_URL || 'http://localhost:3003',
+  '/api/menus': process.env.MENU_SERVICE_URL || 'http://localhost:3004',
+  '/api/cart': process.env.CART_SERVICE_URL || 'http://localhost:3005',
+  '/api/orders': process.env.ORDER_SERVICE_URL || 'http://localhost:3006',
+  '/api/payments': process.env.PAYMENT_SERVICE_URL || 'http://localhost:3007',
+  '/api/deliveries': process.env.DELIVERY_SERVICE_URL || 'http://localhost:3008',
+  '/api/drivers': process.env.DRIVER_SERVICE_URL || 'http://localhost:3009',
+  '/api/tracking': process.env.TRACKING_SERVICE_URL || 'http://localhost:3010',
+  '/api/notifications': process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3011',
+} as const;
+
+export function getServicePrefix(gatewayPath: string): string {
+  return gatewayPath === '/api/menus' ? '' : gatewayPath.replace(/^\/api/, '');
+}
+
+export function rewriteProxyPath(gatewayPath: string, incomingPath: string): string {
+  const [pathname, queryString = ''] = incomingPath.split('?');
+
+  if (/^\/docs-json(?:\/|$)/.test(pathname)) {
+    return `/docs-json${queryString ? `?${queryString}` : ''}`;
+  }
+
+  return `${getServicePrefix(gatewayPath)}${incomingPath}`;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const PORT = process.env.PORT || 3000;
-
-  const proxies = {
-    '/api/auth': process.env.AUTH_SERVICE_URL || 'http://localhost:3001',
-    '/api/users': process.env.USER_SERVICE_URL || 'http://localhost:3002',
-    '/api/restaurants':
-      process.env.RESTAURANT_SERVICE_URL || 'http://localhost:3003',
-    '/api/menus': process.env.MENU_SERVICE_URL || 'http://localhost:3004',
-    '/api/cart': process.env.CART_SERVICE_URL || 'http://localhost:3005',
-    '/api/orders': process.env.ORDER_SERVICE_URL || 'http://localhost:3006',
-    '/api/payments': process.env.PAYMENT_SERVICE_URL || 'http://localhost:3007',
-    '/api/deliveries':
-      process.env.DELIVERY_SERVICE_URL || 'http://localhost:3008',
-    '/api/drivers': process.env.DRIVER_SERVICE_URL || 'http://localhost:3009',
-    '/api/tracking':
-      process.env.TRACKING_SERVICE_URL || 'http://localhost:3010',
-    '/api/notifications':
-      process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3011',
-  };
 
   app.use((request: Request, response: Response, next: NextFunction) => {
     if (isBlockedInternalRoute(request.path)) {
@@ -40,10 +50,9 @@ async function bootstrap() {
     next();
   });
 
-  // Setup Swagger Aggregato
   const swaggerOptions = {
     explorer: true,
-    urls: Object.keys(proxies).map((path) => ({
+    urls: Object.keys(PROXIES).map((path) => ({
       url: `${path}/docs-json`,
       name: path.replace('/api/', '').toUpperCase() + ' API',
     })),
@@ -55,23 +64,13 @@ async function bootstrap() {
     customSiteTitle: 'Food Delivery API Gateway Docs',
   });
 
-  Object.entries(proxies).forEach(([path, target]) => {
-    // menu-service registers its controllers at the root, while the othe
-    // proxied services keep their service prefix (for example /auth).
-    const servicePrefix = path === '/api/menus' ? '' : path.replace(/^\/api/, '');
-
+  Object.entries(PROXIES).forEach(([path, target]) => {
     app.use(
       path,
       createProxyMiddleware({
         target,
         changeOrigin: true,
-
-        // Express strips the mounted `/api/<service>` prefix before
-        // the request reaches this middleware. Re-add the service prefix
-        // expected by the downstream service.
-        pathRewrite: (incomingPath) => {
-          return `${servicePrefix}${incomingPath}`;
-        },
+        pathRewrite: (incomingPath) => rewriteProxyPath(path, incomingPath),
       }),
     );
   });
@@ -82,4 +81,6 @@ async function bootstrap() {
   console.log(`Swagger UI available at http://localhost:${PORT}/docs`);
 }
 
-bootstrap();
+if (require.main === module) {
+  bootstrap();
+}

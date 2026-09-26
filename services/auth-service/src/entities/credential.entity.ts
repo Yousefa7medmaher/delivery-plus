@@ -16,6 +16,24 @@ export class Credential {
   @Column({ type: 'enum', enum: UserRole, default: UserRole.CUSTOMER })
   role!: UserRole;
 
+  @Column({ default: false })
+  emailVerified!: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lockedUntil!: Date | null;
+
+  @Column({ default: 0 })
+  failedLoginCount!: number;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastFailedLoginAt!: Date | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  verificationTokenHash!: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  verificationTokenExpiresAt!: Date | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

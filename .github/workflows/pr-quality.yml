@@ -59,6 +59,15 @@ jobs:
       - name: Build all workspaces
         run: npm run build
 
+      - name: Generate public OpenAPI contract
+        run: npm run openapi:generate
+
+      - name: Check committed public OpenAPI contract
+        run: git diff --exit-code -- docs/openapi/delivery-plus-public.json
+
+      - name: Validate public OpenAPI contract
+        run: npm run openapi:validate
+
   compose-validate:
     name: Docker Compose configuration validation
     runs-on: ubuntu-latest
